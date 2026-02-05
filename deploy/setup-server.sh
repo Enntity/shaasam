@@ -70,6 +70,7 @@ echo -e "${YELLOW}Twilio (optional):${NC}"
 read -r -p "Twilio Account SID: " TWILIO_ACCOUNT_SID
 read -r -p "Twilio Auth Token: " TWILIO_AUTH_TOKEN
 read -r -p "Twilio From Number: " TWILIO_FROM
+read -r -p "Twilio Verify Service SID (optional): " TWILIO_VERIFY_SERVICE_SID
 
 echo ""
 echo -e "${YELLOW}Stripe (optional):${NC}"
@@ -178,6 +179,7 @@ REQUIRE_REVIEW=${REQUIRE_REVIEW}
 TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
 TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
 TWILIO_FROM=${TWILIO_FROM}
+TWILIO_VERIFY_SERVICE_SID=${TWILIO_VERIFY_SERVICE_SID}
 
 # Stripe (optional)
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}

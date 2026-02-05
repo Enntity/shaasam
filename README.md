@@ -17,6 +17,13 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
    npm run dev
    ```
 
+## Quality checks
+
+- Lint: `npm run lint`
+- Tests: `npm test`
+- Watch mode: `npm run test:watch`
+- Tests use `TEST_MONGO_URI` or `MONGO_URI` if available; otherwise an in-memory MongoDB is started.
+
 ## Environment variables
 
 - `MONGODB_URI` (required, or `MONGO_URI`)
@@ -28,6 +35,7 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
 - `SHAASAM_ADMIN_KEY` (required for admin moderation endpoints)
 - `REQUIRE_REVIEW` (optional; if true, only approved humans appear in search)
 - `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` (optional; SMS OTP)
+- `TWILIO_VERIFY_SERVICE_SID` (optional; Twilio Verify SMS without `TWILIO_FROM`)
 - `STRIPE_SECRET_KEY` (optional; payouts)
 - `STRIPE_WEBHOOK_SECRET` (optional; Stripe webhook verification)
 - `STRIPE_CONNECT_RETURN_URL` (optional)

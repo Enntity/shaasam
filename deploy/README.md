@@ -31,6 +31,8 @@ The script will:
 - Create `/opt/shaasam/.env`
 - Create the Docker network
 
+Twilio SMS can be configured either with `TWILIO_FROM` (Messaging) or `TWILIO_VERIFY_SERVICE_SID` (Verify).
+
 ## DNS
 
 Point your domain to the server IP:

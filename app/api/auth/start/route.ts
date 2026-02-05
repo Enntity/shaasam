@@ -28,18 +28,19 @@ export async function POST(request: Request) {
         );
       }
     }
-    const code = createOtp();
-    const { hash, salt } = hashOtp(code);
+    const useVerify = Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
+    const code = useVerify ? undefined : createOtp();
+    const hashed = code ? hashOtp(code) : null;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db.collection('verifications').deleteMany({ phone });
     await db.collection('verifications').insertOne({
       phone,
-      hash,
-      salt,
+      ...(hashed ? { hash: hashed.hash, salt: hashed.salt } : {}),
       expiresAt,
       createdAt: new Date(),
       attempts: 0,
+      provider: useVerify ? 'verify' : 'sms',
     });
 
     const sendResult = await sendOtp(phone, code);
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         : 'Verification code sent.',
     };
 
-    if (sendResult.simulated && process.env.NODE_ENV !== 'production') {
+    if (sendResult.simulated && code && process.env.NODE_ENV !== 'production') {
       response.devCode = code;
     }
 

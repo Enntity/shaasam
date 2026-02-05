@@ -5,6 +5,7 @@ import { normalizePhone } from '@/lib/phone';
 import { verifyOtp } from '@/lib/otp';
 import { createSessionToken, setSessionCookie } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
+import { checkOtp } from '@/lib/twilio';
 
 export const runtime = 'nodejs';
 
@@ -34,7 +35,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Verification expired. Request a new code.' }, { status: 400 });
     }
 
-    const isValid = verifyOtp(code, verification.hash, verification.salt);
+    const useVerify = Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
+    let isValid = false;
+    if (verification.hash && verification.salt) {
+      isValid = verifyOtp(code, verification.hash, verification.salt);
+    } else if (useVerify) {
+      const check = await checkOtp(phone, code);
+      isValid = check.valid;
+    }
     if (!isValid) {
       await db.collection('verifications').updateOne(
         { _id: verification._id },
@@ -64,11 +72,15 @@ export async function POST(request: Request) {
 
     await db.collection('verifications').deleteOne({ _id: verification._id });
 
-    if (!upsert || !upsert.value?._id) {
+    const userDoc = (upsert && 'value' in upsert ? upsert.value : upsert) as
+      | { _id?: ObjectId }
+      | null;
+
+    if (!userDoc?._id) {
       return NextResponse.json({ error: 'User record missing.' }, { status: 500 });
     }
 
-    const userId = (upsert.value._id as ObjectId).toString();
+    const userId = userDoc._id.toString();
     const token = await createSessionToken(userId);
     await setSessionCookie(token);
 

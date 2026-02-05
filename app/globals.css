@@ -11,6 +11,9 @@
   --card: rgba(255, 255, 255, 0.92);
   --shadow: 0 20px 60px rgba(16, 16, 16, 0.08);
   --border: rgba(16, 16, 16, 0.08);
+  --nav-divider: rgba(16, 16, 16, 0.06);
+  --nav-link: rgba(16, 16, 16, 0.74);
+  --nav-link-hover: rgba(16, 16, 16, 0.92);
   --pill-bg: rgba(16, 16, 16, 0.06);
   --badge-bg: rgba(12, 12, 12, 0.08);
   --input-bg: #ffffff;
@@ -32,6 +35,9 @@
   --card: rgba(16, 20, 28, 0.92);
   --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
   --border: rgba(255, 255, 255, 0.08);
+  --nav-divider: rgba(255, 255, 255, 0.08);
+  --nav-link: rgba(245, 245, 245, 0.72);
+  --nav-link-hover: rgba(245, 245, 245, 0.92);
   --pill-bg: rgba(255, 255, 255, 0.08);
   --badge-bg: rgba(255, 255, 255, 0.08);
   --input-bg: rgba(19, 24, 32, 0.9);
@@ -82,31 +88,67 @@ main {
   justify-content: space-between;
   gap: 16px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--nav-divider);
 }
 
 .logo {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   font-family: 'Sora', sans-serif;
   font-weight: 600;
-  font-size: 18px;
+  font-size: 20px;
   letter-spacing: 0.2px;
 }
 
 .logo-mark {
-  width: 96px;
-  height: 96px;
-  display: inline-block;
+  width: 120px;
+  height: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   position: relative;
   filter: drop-shadow(0 10px 16px rgba(16, 16, 16, 0.12));
+  isolation: isolate;
+}
+
+.logo-mark::before {
+  content: '';
+  position: absolute;
+  inset: -6%;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.45;
+  -webkit-mask: url('/shaasam_logo.png') center / contain no-repeat;
+  mask: url('/shaasam_logo.png') center / contain no-repeat;
+}
+
+.logo-mark::before {
+  background: conic-gradient(
+    from 0deg,
+    #10d7c2,
+    #2aa7ff,
+    #ffe08a,
+    #ff7a8f,
+    #10d7c2
+  );
+  filter: blur(10px) saturate(1.4);
+  mix-blend-mode: screen;
+}
+
+@supports not ((-webkit-mask-image: linear-gradient(#000, #000)) or (mask-image: linear-gradient(#000, #000))) {
+  .logo-mark::before {
+    display: none;
+  }
 }
 
 .logo-mark__img {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   display: block;
+  filter: saturate(1.1);
 }
 
 .nav-links {
@@ -114,7 +156,13 @@ main {
   align-items: center;
   gap: 18px;
   font-size: 14px;
-  color: var(--muted);
+  color: var(--nav-link);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.nav-links a:hover {
+  color: var(--nav-link-hover);
 }
 
 .hero {
@@ -182,6 +230,10 @@ main {
   backdrop-filter: blur(10px);
 }
 
+.hero .panel {
+  box-shadow: 0 18px 48px rgba(16, 16, 16, 0.06);
+}
+
 .pills {
   display: flex;
   flex-wrap: wrap;
@@ -189,10 +241,10 @@ main {
 }
 
 .pill {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.15em;
-  padding: 8px 12px;
+  letter-spacing: 0.12em;
+  padding: 7px 11px;
   border-radius: 999px;
   background: var(--pill-bg);
   color: var(--muted);
@@ -362,18 +414,21 @@ main {
   }
 }
 
-@keyframes logoShift {
+@keyframes logoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes logoHue {
   0% {
-    filter: saturate(1) brightness(1);
+    filter: saturate(1.1) hue-rotate(0deg);
   }
-  33% {
-    filter: saturate(1.25) brightness(1.08);
-  }
-  66% {
-    filter: saturate(0.9) brightness(0.98);
+  50% {
+    filter: saturate(1.25) hue-rotate(160deg);
   }
   100% {
-    filter: saturate(1) brightness(1);
+    filter: saturate(1.1) hue-rotate(360deg);
   }
 }
 
@@ -387,11 +442,24 @@ main {
   .card:nth-child(3) { animation-delay: 0.14s; }
   .card:nth-child(4) { animation-delay: 0.2s; }
   .logo-mark__img {
-    animation: logoShift 5s ease-in-out infinite;
+    animation: logoHue 12s linear infinite;
+  }
+  .logo-mark::before {
+    animation: logoSpin 7s linear infinite;
+    opacity: 0.6;
   }
 }
 
 @media (max-width: 720px) {
+  .logo {
+    font-size: 18px;
+  }
+
+  .logo-mark {
+    width: 96px;
+    height: 96px;
+  }
+
   .hero-actions {
     flex-direction: column;
     align-items: stretch;

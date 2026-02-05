@@ -29,7 +29,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Profile not found.' }, { status: 404 });
   }
 
-  const gate = requireApproved(user);
+  const gate = requireApproved({
+    reviewStatus: user.reviewStatus,
+    status: user.status,
+  });
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: 403 });
   }

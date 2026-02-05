@@ -9,6 +9,10 @@ RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
+ARG MONGODB_URI=mongodb://127.0.0.1:27017/shaasam
+ARG MONGO_URI=mongodb://127.0.0.1:27017/shaasam
+ENV MONGODB_URI=$MONGODB_URI
+ENV MONGO_URI=$MONGO_URI
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

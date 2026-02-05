@@ -6,11 +6,15 @@ import { verifyOtp } from '@/lib/otp';
 import { createSessionToken, setSessionCookie } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { checkOtp } from '@/lib/twilio';
+import { isAllowedOrigin } from '@/lib/origin';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
+    if (!isAllowedOrigin(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const body = await request.json();
     const phone = normalizePhone(body?.phone || '');
     const code = String(body?.code || '').trim();

@@ -4,6 +4,7 @@ import { createOtp, hashOtp } from '@/lib/otp';
 import { normalizePhone } from '@/lib/phone';
 import { sendOtp } from '@/lib/twilio';
 import { recordAudit } from '@/lib/audit';
+import { isAllowedOrigin } from '@/lib/origin';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,9 @@ const RESEND_WINDOW_MS = 60 * 1000;
 
 export async function POST(request: Request) {
   try {
+    if (!isAllowedOrigin(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const body = await request.json();
     const phone = normalizePhone(body?.phone || '');
     if (!phone) {

@@ -60,7 +60,7 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
   }
   ```
 
-### Human onboarding
+### Human onboarding (same-origin only)
 
 - `POST /api/auth/start` → `{ phone }`
 - `POST /api/auth/verify` → `{ phone, code }`

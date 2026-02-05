@@ -59,6 +59,7 @@ services:
 networks:
   web:
     name: shaasam_web
+    external: true
 
 volumes:
   traefik-certificates:

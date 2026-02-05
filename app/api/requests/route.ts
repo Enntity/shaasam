@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       ? body.skills.map((skill: string) => String(skill).trim()).filter(Boolean).slice(0, MAX_SKILLS)
       : [];
 
-    const skillsNormalized = skills.map((skill) => skill.toLowerCase());
+    const skillsNormalized = skills.map((skill: string) => skill.toLowerCase());
     const doc = {
       title: body?.title ? String(body.title).slice(0, 120) : 'Help needed',
       description: body?.description ? String(body.description).slice(0, 2000) : '',

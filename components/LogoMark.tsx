@@ -5,14 +5,18 @@ type LogoMarkProps = {
 
 export default function LogoMark({ size = 96, className }: LogoMarkProps) {
   return (
-    <img
-      className={className}
-      src="/shaasam_logo.png"
-      alt="Shaasam"
-      width={size}
-      height={size}
-      style={{ width: size, height: 'auto' }}
-      loading="eager"
-    />
+    <span
+      className={['logo-mark', className].filter(Boolean).join(' ')}
+      style={{ width: size, height: size }}
+    >
+      <img
+        className="logo-mark__img"
+        src="/shaasam_logo.png"
+        alt="Shaasam"
+        width={size}
+        height={size}
+        loading="eager"
+      />
+    </span>
   );
 }

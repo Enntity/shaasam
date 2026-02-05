@@ -23,6 +23,8 @@ export async function ensureIndexes(db: Db) {
       { expireAfterSeconds: 0 }
     ),
     db.collection('requests').createIndex({ status: 1, createdAt: -1 }),
+    db.collection('requests').createIndex({ status: 1, skillsNormalized: 1 }),
+    db.collection('requests').createIndex({ acceptedBy: 1, updatedAt: -1 }),
     db.collection('payments').createIndex({ requestId: 1 }),
     db.collection('payments').createIndex({ humanId: 1 }),
     db.collection('payments').createIndex({ status: 1 }),

@@ -67,6 +67,11 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
 - `GET /api/profile`
 - `POST /api/profile`
 
+### Human requests inbox
+
+- `GET /api/humans/requests` → `{ available, mine }`
+- `POST /api/humans/requests/:id` → `{ action: "accept" | "decline" | "start" | "complete" }`
+
 ### Payments
 
 - `POST /api/payments/connect` (requires human session)

@@ -18,10 +18,12 @@ export async function POST(request: Request) {
       ? body.skills.map((skill: string) => String(skill).trim()).filter(Boolean).slice(0, MAX_SKILLS)
       : [];
 
+    const skillsNormalized = skills.map((skill) => skill.toLowerCase());
     const doc = {
       title: body?.title ? String(body.title).slice(0, 120) : 'Help needed',
       description: body?.description ? String(body.description).slice(0, 2000) : '',
       skills,
+      skillsNormalized,
       budget: body?.budget ? Number(body.budget) : null,
       callbackUrl: body?.callbackUrl ? String(body.callbackUrl).slice(0, 400) : null,
       requester: {
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
         email: body?.requester?.email ? String(body.requester.email).slice(0, 120) : null,
       },
       status: 'open',
+      declinedBy: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -79,6 +82,11 @@ export async function GET(request: Request) {
       callbackUrl: item.callbackUrl,
       requester: item.requester,
       status: item.status,
+      acceptedBy: item.acceptedBy ? item.acceptedBy.toString() : null,
+      acceptedAt: item.acceptedAt || null,
+      startedAt: item.startedAt || null,
+      completedAt: item.completedAt || null,
+      updatedAt: item.updatedAt || null,
       paymentId: item.paymentId ? item.paymentId.toString() : null,
       paymentStatus: item.paymentStatus || null,
       createdAt: item.createdAt,

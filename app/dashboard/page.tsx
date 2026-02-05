@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { CATEGORY_OPTIONS } from '@/lib/categories';
 import LogoMark from '@/components/LogoMark';
 
@@ -127,10 +128,17 @@ export default function DashboardPage() {
   return (
     <main>
       <div className="page">
-        <div className="logo">
-          <LogoMark className="logo-mark" />
-          Shaasam
-        </div>
+        <nav className="nav">
+          <div className="logo">
+            <LogoMark className="logo-mark" />
+            Shaasam
+          </div>
+          <div className="nav-links">
+            <Link href="/">Home</Link>
+            <Link href="/dashboard">Dashboard</Link>
+            <Link href="/requests">Requests</Link>
+          </div>
+        </nav>
 
         <section className="hero" style={{ marginTop: 32 }}>
           <div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import LogoMark from '@/components/LogoMark';
 
 const STORAGE_KEY = 'shaasam_admin_key';
@@ -50,7 +50,7 @@ export default function AdminPage() {
     return params.toString();
   };
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     if (!savedKey) return;
     setLoading(true);
     setError('');
@@ -73,7 +73,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [accountFilter, reviewFilter, savedKey]);
 
   const saveKey = () => {
     if (!adminKey.trim()) {
@@ -131,8 +131,7 @@ export default function AdminPage() {
     if (savedKey) {
       loadUsers();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedKey, reviewFilter, accountFilter]);
+  }, [savedKey, loadUsers]);
 
   return (
     <main>

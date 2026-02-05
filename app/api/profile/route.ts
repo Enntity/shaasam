@@ -66,7 +66,8 @@ export async function POST(request: Request) {
         { returnDocument: 'after' }
       );
 
-    const saved = updated?.value;
+    const saved =
+      updated && 'value' in updated ? updated.value : updated;
     if (!saved) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }

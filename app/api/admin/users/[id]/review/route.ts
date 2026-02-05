@@ -51,7 +51,10 @@ export async function POST(
     { returnDocument: 'after' }
   );
 
-  if (!result || !result.value) {
+  const updated =
+    result && 'value' in result ? result.value : result;
+
+  if (!updated) {
     return NextResponse.json({ error: 'User not found.' }, { status: 404 });
   }
 
@@ -64,9 +67,9 @@ export async function POST(
   });
 
   return NextResponse.json({
-    id: result.value._id.toString(),
-    reviewStatus: result.value.reviewStatus,
-    status: result.value.status,
-    reviewNotes: result.value.reviewNotes || null,
+    id: updated._id.toString(),
+    reviewStatus: updated.reviewStatus,
+    status: updated.status,
+    reviewNotes: updated.reviewNotes || null,
   });
 }

@@ -4,7 +4,6 @@ import { ObjectId } from 'mongodb';
 import { getDb } from './mongodb';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __shaasamAuthWarned: boolean | undefined;
 }
 

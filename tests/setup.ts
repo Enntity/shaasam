@@ -3,6 +3,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { MongoClient } from 'mongodb';
+import { ensureIndexes } from '@/lib/indexes';
 
 let mongo: MongoMemoryServer | null = null;
 
@@ -76,6 +77,7 @@ beforeEach(async () => {
   const { getDb } = await import('@/lib/mongodb');
   const db = await getDb();
   await db.dropDatabase();
+  await ensureIndexes(db);
 });
 
 afterAll(async () => {

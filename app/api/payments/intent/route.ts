@@ -4,6 +4,7 @@ import { getDb } from '@/lib/mongodb';
 import { isValidApiKey } from '@/lib/api-key';
 import { getStripe } from '@/lib/stripe';
 import { recordAudit } from '@/lib/audit';
+import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -11,8 +12,25 @@ const MIN_AMOUNT = 100; // $1.00 in cents
 const ALLOWED_CURRENCIES = new Set(['usd']);
 
 export async function POST(request: Request) {
+  const apiKey = request.headers.get('x-api-key') || '';
   if (!isValidApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 20 requests per minute per API key (strict for payments)
+  const rateLimitResult = checkApiKeyRateLimit(apiKey, {
+    limit: 20,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   }
 
   const stripe = getStripe();
@@ -123,12 +141,17 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({
-      id: result.insertedId.toString(),
-      stripePaymentIntentId: intent.id,
-      clientSecret: intent.client_secret,
-      status: intent.status,
-    });
+    return NextResponse.json(
+      {
+        id: result.insertedId.toString(),
+        stripePaymentIntentId: intent.id,
+        clientSecret: intent.client_secret,
+        status: intent.status,
+      },
+      {
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   } catch (error) {
     console.error('Payment intent failed', error);
     return NextResponse.json({ error: 'Unable to create payment.' }, { status: 500 });

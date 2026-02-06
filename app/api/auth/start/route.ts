@@ -5,12 +5,29 @@ import { normalizePhone } from '@/lib/phone';
 import { sendOtp } from '@/lib/twilio';
 import { recordAudit } from '@/lib/audit';
 import { isAllowedOrigin } from '@/lib/origin';
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 const RESEND_WINDOW_MS = 60 * 1000;
 
 export async function POST(request: Request) {
+  // Rate limit: 5 OTP requests per minute per IP
+  const rateLimitResult = checkRateLimit(request, {
+    limit: 5,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Too many OTP requests. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     if (!isAllowedOrigin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -69,7 +86,9 @@ export async function POST(request: Request) {
       response.devCode = code;
     }
 
-    return NextResponse.json(response);
+    return NextResponse.json(response, {
+      headers: getRateLimitHeaders(rateLimitResult),
+    });
   } catch (error) {
     console.error('OTP start failed', error);
     return NextResponse.json({ error: 'Unable to send code.' }, { status: 500 });

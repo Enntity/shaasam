@@ -5,18 +5,54 @@ import { getSessionUser } from '@/lib/auth';
 import { validateAlias } from '@/lib/alias';
 import { deriveCategoriesFromSkills, normalizeSkills } from '@/lib/skills';
 import { recordAudit } from '@/lib/audit';
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: Request) {
+  // Rate limit: 100 requests per minute per IP
+  const rateLimitResult = checkRateLimit(request, {
+    limit: 100,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  return NextResponse.json(user);
+
+  return NextResponse.json(user, {
+    headers: getRateLimitHeaders(rateLimitResult),
+  });
 }
 
 export async function POST(request: Request) {
+  // Rate limit: 10 requests per minute per IP (strict for updates)
+  const rateLimitResult = checkRateLimit(request, {
+    limit: 10,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -98,22 +134,27 @@ export async function POST(request: Request) {
       subjectId: user.id,
     });
 
-    return NextResponse.json({
-      id: saved._id.toString(),
-      phone: saved.phone,
-      email: saved.email,
-      fullName: saved.fullName,
-      alias: saved.alias || saved.displayName,
-      about: saved.about || saved.bio,
-      skills: saved.skills || [],
-      categories: saved.categories || [],
-      hourlyRate: saved.hourlyRate,
-      location: saved.location,
-      availability: saved.availability,
-      stripeAccountId: saved.stripeAccountId,
-      reviewStatus: saved.reviewStatus,
-      status: saved.status,
-    });
+    return NextResponse.json(
+      {
+        id: saved._id.toString(),
+        phone: saved.phone,
+        email: saved.email,
+        fullName: saved.fullName,
+        alias: saved.alias || saved.displayName,
+        about: saved.about || saved.bio,
+        skills: saved.skills || [],
+        categories: saved.categories || [],
+        hourlyRate: saved.hourlyRate,
+        location: saved.location,
+        availability: saved.availability,
+        stripeAccountId: saved.stripeAccountId,
+        reviewStatus: saved.reviewStatus,
+        status: saved.status,
+      },
+      {
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   } catch (error) {
     console.error('Profile update failed', error);
     return NextResponse.json({ error: 'Unable to save profile.' }, { status: 500 });

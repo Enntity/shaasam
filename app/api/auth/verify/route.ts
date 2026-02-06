@@ -7,10 +7,27 @@ import { createSessionToken, setSessionCookie } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { checkOtp } from '@/lib/twilio';
 import { isAllowedOrigin } from '@/lib/origin';
+import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  // Rate limit: 10 OTP verify attempts per minute per IP
+  const rateLimitResult = checkRateLimit(request, {
+    limit: 10,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Too many verify attempts. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
+  }
+
   try {
     if (!isAllowedOrigin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -99,7 +116,12 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ ok: true, userId });
+    return NextResponse.json(
+      { ok: true, userId },
+      {
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   } catch (error) {
     console.error('OTP verify failed', error);
     return NextResponse.json({ error: 'Unable to verify code.' }, { status: 500 });

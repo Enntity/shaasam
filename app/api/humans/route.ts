@@ -3,11 +3,12 @@ import { getDb } from '@/lib/mongodb';
 import { isValidApiKey } from '@/lib/api-key';
 import { normalizeCategories } from '@/lib/categories';
 import { normalizeSkills } from '@/lib/skills';
+import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-limit';
 
 export const runtime = 'nodejs';
 
 function escapeRegex(input: string) {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 }
 
 function parseNumber(value: string | null, fallback: number) {
@@ -93,8 +94,25 @@ function scoreHuman({
 }
 
 export async function GET(request: Request) {
+  const apiKey = request.headers.get('x-api-key') || '';
   if (!isValidApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 60 requests per minute per API key
+  const rateLimitResult = checkApiKeyRateLimit(apiKey, {
+    limit: 60,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   }
 
   const url = new URL(request.url);
@@ -199,27 +217,32 @@ export async function GET(request: Request) {
 
   const sliced = withScores.slice(0, limit);
 
-  return NextResponse.json({
-    data: sliced.map(({ human, score }) => ({
-      id: human._id.toString(),
-      alias: human.alias || human.displayName,
-      about: human.about || human.bio,
-      displayName: human.alias || human.displayName,
-      bio: human.about || human.bio,
-      headline: human.headline,
-      skills: human.skills || [],
-      categories: human.categories || [],
-      hourlyRate: human.hourlyRate,
-      location: human.location,
-      availability: human.availability,
-      updatedAt: human.updatedAt,
-      score: includeScores ? score : undefined,
-    })),
-    meta: {
-      count: sliced.length,
-      limit,
-      offset,
-      sort: shouldScore ? 'score' : 'recent',
+  return NextResponse.json(
+    {
+      data: sliced.map(({ human, score }) => ({
+        id: human._id.toString(),
+        alias: human.alias || human.displayName,
+        about: human.about || human.bio,
+        displayName: human.alias || human.displayName,
+        bio: human.about || human.bio,
+        headline: human.headline,
+        skills: human.skills || [],
+        categories: human.categories || [],
+        hourlyRate: human.hourlyRate,
+        location: human.location,
+        availability: human.availability,
+        updatedAt: human.updatedAt,
+        score: includeScores ? score : undefined,
+      })),
+      meta: {
+        count: sliced.length,
+        limit,
+        offset,
+        sort: shouldScore ? 'score' : 'recent',
+      },
     },
-  });
+    {
+      headers: getRateLimitHeaders(rateLimitResult),
+    }
+  );
 }

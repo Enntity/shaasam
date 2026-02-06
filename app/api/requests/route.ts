@@ -2,14 +2,32 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { isValidApiKey } from '@/lib/api-key';
 import { recordAudit } from '@/lib/audit';
+import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-limit';
 
 export const runtime = 'nodejs';
 
 const MAX_SKILLS = 12;
 
 export async function POST(request: Request) {
+  const apiKey = request.headers.get('x-api-key') || '';
   if (!isValidApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 30 requests per minute per API key (more restrictive for writes)
+  const rateLimitResult = checkApiKeyRateLimit(apiKey, {
+    limit: 30,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   }
 
   try {
@@ -47,7 +65,12 @@ export async function POST(request: Request) {
       subjectId: result.insertedId.toString(),
     });
 
-    return NextResponse.json({ id: result.insertedId.toString(), status: doc.status });
+    return NextResponse.json(
+      { id: result.insertedId.toString(), status: doc.status },
+      {
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   } catch (error) {
     console.error('Request create failed', error);
     return NextResponse.json({ error: 'Unable to create request.' }, { status: 500 });
@@ -55,8 +78,25 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const apiKey = request.headers.get('x-api-key') || '';
   if (!isValidApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Rate limit: 60 requests per minute per API key
+  const rateLimitResult = checkApiKeyRateLimit(apiKey, {
+    limit: 60,
+    window: 60 * 1000,
+  });
+
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please try again later.' },
+      {
+        status: 429,
+        headers: getRateLimitHeaders(rateLimitResult),
+      }
+    );
   }
 
   const url = new URL(request.url);
@@ -72,25 +112,30 @@ export async function GET(request: Request) {
     .limit(limit)
     .toArray();
 
-  return NextResponse.json({
-    data: results.map((item) => ({
-      id: item._id.toString(),
-      title: item.title,
-      description: item.description,
-      skills: item.skills,
-      budget: item.budget,
-      callbackUrl: item.callbackUrl,
-      requester: item.requester,
-      status: item.status,
-      acceptedBy: item.acceptedBy ? item.acceptedBy.toString() : null,
-      acceptedAt: item.acceptedAt || null,
-      startedAt: item.startedAt || null,
-      completedAt: item.completedAt || null,
-      updatedAt: item.updatedAt || null,
-      paymentId: item.paymentId ? item.paymentId.toString() : null,
-      paymentStatus: item.paymentStatus || null,
-      createdAt: item.createdAt,
-    })),
-    meta: { count: results.length },
-  });
+  return NextResponse.json(
+    {
+      data: results.map((item) => ({
+        id: item._id.toString(),
+        title: item.title,
+        description: item.description,
+        skills: item.skills,
+        budget: item.budget,
+        callbackUrl: item.callbackUrl,
+        requester: item.requester,
+        status: item.status,
+        acceptedBy: item.acceptedBy ? item.acceptedBy.toString() : null,
+        acceptedAt: item.acceptedAt || null,
+        startedAt: item.startedAt || null,
+        completedAt: item.completedAt || null,
+        updatedAt: item.updatedAt || null,
+        paymentId: item.paymentId ? item.paymentId.toString() : null,
+        paymentStatus: item.paymentStatus || null,
+        createdAt: item.createdAt,
+      })),
+      meta: { count: results.length },
+    },
+    {
+      headers: getRateLimitHeaders(rateLimitResult),
+    }
+  );
 }

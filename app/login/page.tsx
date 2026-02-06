@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Suspense } from 'react';
 import LogoMark from '@/components/LogoMark';
 import HumanAuthPanel from '@/components/HumanAuthPanel';
 
@@ -19,17 +20,19 @@ export default function LoginPage() {
           </div>
         </nav>
 
-        <HumanAuthPanel
-          kicker="Human login"
-          title="Pick up where you left off."
-          copy="Enter your phone number to get a one-time code and jump back into your tasks."
-          redirectTo="/requests"
-          footer={
-            <div className="helper">
-              New here? <Link className="link-button" href="/join">Create your profile</Link>
-            </div>
-          }
-        />
+        <Suspense fallback={<div className="panel">Loading login...</div>}>
+          <HumanAuthPanel
+            kicker="Human login"
+            title="Pick up where you left off."
+            copy="Enter your phone number to get a one-time code and jump back into your tasks."
+            redirectTo="/requests"
+            footer={
+              <div className="helper">
+                New here? <Link className="link-button" href="/join">Create your profile</Link>
+              </div>
+            }
+          />
+        </Suspense>
       </div>
     </main>
   );

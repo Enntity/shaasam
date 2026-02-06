@@ -2,24 +2,11 @@ import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
 import { getSessionUser } from '@/lib/auth';
-import { normalizeCategories } from '@/lib/categories';
+import { validateAlias } from '@/lib/alias';
+import { deriveCategoriesFromSkills, normalizeSkills } from '@/lib/skills';
 import { recordAudit } from '@/lib/audit';
 
 export const runtime = 'nodejs';
-
-const MAX_SKILLS = 24;
-
-function normalizeSkills(skills: unknown): { original: string[]; normalized: string[] } {
-  if (!Array.isArray(skills)) {
-    return { original: [], normalized: [] };
-  }
-  const cleaned = skills
-    .map((skill) => String(skill).trim())
-    .filter(Boolean)
-    .slice(0, MAX_SKILLS);
-  const normalized = Array.from(new Set(cleaned.map((skill) => skill.toLowerCase())));
-  return { original: cleaned, normalized };
-}
 
 export async function GET() {
   const user = await getSessionUser();
@@ -37,27 +24,58 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-  const { original, normalized } = normalizeSkills(body?.skills);
-  const { original: categoryOriginal, normalized: categoryNormalized } = normalizeCategories(
-    body?.categories
-  );
+    const fullName = body?.fullName ? String(body.fullName).trim().slice(0, 120) : '';
+    if (!fullName) {
+      return NextResponse.json({ error: 'Full name is required.' }, { status: 400 });
+    }
+
+    const aliasCheck = validateAlias(body?.alias ? String(body.alias) : '');
+    if (!aliasCheck.valid || !aliasCheck.normalized) {
+      return NextResponse.json(
+        { error: aliasCheck.reason || 'Alias is invalid.' },
+        { status: 400 }
+      );
+    }
+
+    const { original, normalized } = normalizeSkills(body?.skills);
+    if (normalized.length === 0) {
+      return NextResponse.json({ error: 'Select at least one skill.' }, { status: 400 });
+    }
+
+    const { categories, normalized: categoryNormalized } = deriveCategoriesFromSkills(original);
+    const aliasNormalized = aliasCheck.normalized;
+    const about = body?.about ? String(body.about).slice(0, 1200) : '';
+    const rawRate = body?.hourlyRate ? Number(body.hourlyRate) : 0;
+    const hourlyRate = Number.isFinite(rawRate) ? rawRate : 0;
 
     const update = {
       email: body?.email ? String(body.email).slice(0, 160) : '',
-      displayName: body?.displayName ? String(body.displayName).slice(0, 80) : '',
-      headline: body?.headline ? String(body.headline).slice(0, 120) : '',
-      bio: body?.bio ? String(body.bio).slice(0, 1200) : '',
+      fullName,
+      alias: aliasNormalized,
+      aliasNormalized,
+      about,
+      displayName: aliasNormalized,
+      headline: '',
+      bio: about,
       skills: original,
       skillsNormalized: normalized,
-      categories: categoryOriginal,
+      categories,
       categoriesNormalized: categoryNormalized,
-      hourlyRate: body?.hourlyRate ? Number(body.hourlyRate) : 0,
+      hourlyRate,
       location: body?.location ? String(body.location).slice(0, 120) : '',
       availability: body?.availability ? String(body.availability).slice(0, 32) : 'weekdays',
       updatedAt: new Date(),
     };
 
     const db = await getDb();
+    const aliasTaken = await db.collection('users').findOne({
+      aliasNormalized,
+      _id: { $ne: new ObjectId(user.id) },
+    });
+    if (aliasTaken) {
+      return NextResponse.json({ error: 'Alias is already taken.' }, { status: 409 });
+    }
+
     const updated = await db
       .collection('users')
       .findOneAndUpdate(
@@ -84,9 +102,9 @@ export async function POST(request: Request) {
       id: saved._id.toString(),
       phone: saved.phone,
       email: saved.email,
-      displayName: saved.displayName,
-      headline: saved.headline,
-      bio: saved.bio,
+      fullName: saved.fullName,
+      alias: saved.alias || saved.displayName,
+      about: saved.about || saved.bio,
       skills: saved.skills || [],
       categories: saved.categories || [],
       hourlyRate: saved.hourlyRate,

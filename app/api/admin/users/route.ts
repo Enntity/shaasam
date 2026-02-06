@@ -30,11 +30,15 @@ export async function GET(request: Request) {
   return NextResponse.json({
     data: users.map((user) => ({
       id: user._id.toString(),
-      displayName: user.displayName,
+      fullName: user.fullName,
+      alias: user.alias || user.displayName,
+      about: user.about || user.bio,
       email: user.email,
       headline: user.headline,
       skills: user.skills || [],
       categories: user.categories || [],
+      hourlyRate: user.hourlyRate,
+      location: user.location,
       reviewStatus: user.reviewStatus,
       status: user.status,
       createdAt: user.createdAt,

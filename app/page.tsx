@@ -162,7 +162,7 @@ export default function HomePage() {
 
         <footer className="footer">
           <div>© 2026 Shaasam — Humans as a Service.</div>
-          <div>Questions? hello@shaasam.ai</div>
+          <div>Questions? info@enntity.com</div>
         </footer>
       </div>
     </main>

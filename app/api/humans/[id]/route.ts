@@ -37,9 +37,11 @@ export async function GET(
 
   return NextResponse.json({
     id: human._id.toString(),
-    displayName: human.displayName,
+    alias: human.alias || human.displayName,
+    about: human.about || human.bio,
+    displayName: human.alias || human.displayName,
     headline: human.headline,
-    bio: human.bio,
+    bio: human.about || human.bio,
     skills: human.skills || [],
     categories: human.categories || [],
     hourlyRate: human.hourlyRate,

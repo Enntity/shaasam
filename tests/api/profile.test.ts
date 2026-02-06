@@ -36,16 +36,18 @@ describe('profile', () => {
 
     const res = await POST(
       jsonRequest('http://test/api/profile', {
-        displayName: 'Rina T.',
-        skills: ['Prompting'],
-        categories: ['Prompting'],
+        fullName: 'Rina Tan',
+        alias: 'rina-t',
+        about: 'Prompt engineering and evaluations.',
+        skills: ['Prompt engineering'],
         hourlyRate: 90,
       })
     );
 
     expect(res.status).toBe(200);
     const payload = await res.json();
-    expect(payload.displayName).toBe('Rina T.');
-    expect(payload.skills).toContain('Prompting');
+    expect(payload.alias).toBe('rina-t');
+    expect(payload.skills).toContain('Prompt engineering');
+    expect(payload.categories).toContain('Prompting');
   });
 });

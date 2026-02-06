@@ -24,6 +24,7 @@ export default function RequestsPage() {
   const [data, setData] = useState<RequestsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState<number | null>(null);
   const [status, setStatus] = useState('');
 
   const load = async () => {
@@ -31,10 +32,12 @@ export default function RequestsPage() {
     setError('');
     try {
       const res = await fetch('/api/humans/requests');
-      const body = await res.json();
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        setErrorCode(res.status);
         throw new Error(body?.error || 'Unable to load requests.');
       }
+      setErrorCode(null);
       setData(body);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load requests.');
@@ -66,6 +69,24 @@ export default function RequestsPage() {
       setError(err instanceof Error ? err.message : 'Action failed.');
     }
   };
+
+  const errorTitle =
+    errorCode === 401
+      ? 'Log in to view tasks'
+      : errorCode === 403
+        ? 'Profile pending review'
+        : errorCode === 404
+          ? 'Finish your profile'
+          : 'Unable to load requests';
+
+  const errorBody =
+    errorCode === 401
+      ? 'Verify your phone to access requests.'
+      : errorCode === 403
+        ? 'Complete your profile while we review. Tasks unlock after approval.'
+        : errorCode === 404
+          ? 'We could not find a profile for this session.'
+          : error;
 
   return (
     <main>
@@ -100,6 +121,30 @@ export default function RequestsPage() {
             </div>
           </div>
         </section>
+
+        {error ? (
+          <section style={{ marginTop: 24 }}>
+            <div className="card">
+              <h3>{errorTitle}</h3>
+              <p>{errorBody}</p>
+              <div className="hero-actions" style={{ marginTop: 12 }}>
+                {errorCode === 401 ? (
+                  <Link className="button button-primary" href="/login">
+                    Log in
+                  </Link>
+                ) : null}
+                {errorCode === 403 || errorCode === 404 ? (
+                  <Link className="button button-secondary" href="/dashboard">
+                    Update profile
+                  </Link>
+                ) : null}
+                <Link className="button button-secondary" href="/join">
+                  Verify phone
+                </Link>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section style={{ marginTop: 48 }}>
           <h2 className="section-title">Available requests</h2>

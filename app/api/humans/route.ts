@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 import { isValidApiKey } from '@/lib/api-key';
 import { normalizeCategories } from '@/lib/categories';
+import { normalizeSkills } from '@/lib/skills';
 
 export const runtime = 'nodejs';
 
@@ -55,9 +56,12 @@ function scoreHuman({
   if (q) {
     const safe = escapeRegex(q);
     const regex = new RegExp(safe, 'i');
-    if (human.displayName && regex.test(human.displayName)) score += 6;
-    if (human.headline && regex.test(human.headline)) score += 4;
-    if (human.bio && regex.test(human.bio)) score += 2;
+    const alias = human.alias || human.displayName;
+    const about = human.about || human.bio;
+    if (alias && regex.test(alias)) score += 6;
+    if (human.fullName && regex.test(human.fullName)) score += 3;
+    if (human.headline && regex.test(human.headline)) score += 2;
+    if (about && regex.test(about)) score += 3;
     if (Array.isArray(human.skills) && human.skills.some((skill: string) => regex.test(skill))) {
       score += 3;
     }
@@ -107,11 +111,7 @@ export async function GET(request: Request) {
   const includeScores = url.searchParams.get('includeScores') === 'true';
 
   const skills = skillsParam
-    ? skillsParam
-        .split(',')
-        .map((skill) => skill.trim().toLowerCase())
-        .filter(Boolean)
-        .slice(0, 12)
+    ? normalizeSkills(skillsParam).normalized.slice(0, 12)
     : [];
 
   const categories = categoriesParam
@@ -148,6 +148,9 @@ export async function GET(request: Request) {
   if (q) {
     const regex = new RegExp(escapeRegex(q), 'i');
     query.$or = [
+      { alias: regex },
+      { fullName: regex },
+      { about: regex },
       { displayName: regex },
       { headline: regex },
       { bio: regex },
@@ -199,9 +202,11 @@ export async function GET(request: Request) {
   return NextResponse.json({
     data: sliced.map(({ human, score }) => ({
       id: human._id.toString(),
-      displayName: human.displayName,
+      alias: human.alias || human.displayName,
+      about: human.about || human.bio,
+      displayName: human.alias || human.displayName,
+      bio: human.about || human.bio,
       headline: human.headline,
-      bio: human.bio,
       skills: human.skills || [],
       categories: human.categories || [],
       hourlyRate: human.hourlyRate,

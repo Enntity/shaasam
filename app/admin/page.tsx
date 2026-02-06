@@ -7,11 +7,15 @@ const STORAGE_KEY = 'shaasam_admin_key';
 
 type AdminUser = {
   id: string;
-  displayName?: string;
+  fullName?: string;
+  alias?: string;
+  about?: string;
   email?: string;
   headline?: string;
   skills?: string[];
   categories?: string[];
+  hourlyRate?: number;
+  location?: string;
   reviewStatus?: string;
   status?: string;
   createdAt?: string;
@@ -228,8 +232,8 @@ export default function AdminPage() {
                 <div key={user.id} className="card">
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <div>
-                      <h3>{user.displayName || 'Unnamed'}</h3>
-                      <p>{user.headline || '—'}</p>
+                      <h3>{user.fullName || user.alias || 'Unnamed'}</h3>
+                      <p>{user.alias ? `@${user.alias}` : '—'}</p>
                       <div className="helper" style={{ marginTop: 6 }}>
                         {user.email || 'No email'}
                       </div>
@@ -244,6 +248,10 @@ export default function AdminPage() {
                     <div className="helper">Skills: {(user.skills || []).join(', ') || '—'}</div>
                     <div className="helper">
                       Categories: {(user.categories || []).join(', ') || '—'}
+                    </div>
+                    <div className="helper">
+                      Rate: {user.hourlyRate ? `$${user.hourlyRate}/hr` : '—'} · Location:{' '}
+                      {user.location || '—'}
                     </div>
                   </div>
 

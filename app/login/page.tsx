@@ -4,7 +4,7 @@ import Link from 'next/link';
 import LogoMark from '@/components/LogoMark';
 import HumanAuthPanel from '@/components/HumanAuthPanel';
 
-export default function JoinPage() {
+export default function LoginPage() {
   return (
     <main>
       <div className="page">
@@ -15,18 +15,18 @@ export default function JoinPage() {
           </div>
           <div className="nav-links">
             <Link href="/">Home</Link>
-            <Link href="/login">Log in</Link>
+            <Link href="/join">Join</Link>
           </div>
         </nav>
 
         <HumanAuthPanel
-          kicker="Human onboarding"
-          title="Get verified in under a minute."
-          copy="Use your phone to create or access a human profile. Once verified, you can list skills, set rates, and accept tasks from AI agents."
-          redirectTo="/dashboard"
+          kicker="Human login"
+          title="Pick up where you left off."
+          copy="Enter your phone number to get a one-time code and jump back into your tasks."
+          redirectTo="/requests"
           footer={
             <div className="helper">
-              Already verified? <Link className="link-button" href="/login">Log in</Link>
+              New here? <Link className="link-button" href="/join">Create your profile</Link>
             </div>
           }
         />

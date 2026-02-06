@@ -330,6 +330,93 @@ main {
   color: var(--muted);
 }
 
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.field-row .input {
+  flex: 1;
+}
+
+.skill-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
+.skill-toolbar {
+  display: grid;
+  gap: 8px;
+}
+
+.skill-toolbar .input {
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.skill-chip {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 8px 10px;
+  background: var(--button-secondary-bg);
+  color: var(--ink);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.skill-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+}
+
+.skill-chip.is-active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: transparent;
+}
+
+.skill-chip small {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.status.ok {
+  color: #157f6e;
+}
+
+.status.warn {
+  color: #d92d20;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-2);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
 .kicker {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
@@ -467,5 +554,10 @@ main {
 
   .nav-links {
     display: none;
+  }
+
+  .field-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

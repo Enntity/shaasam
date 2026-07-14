@@ -14,7 +14,7 @@ const mockedGetSessionUser = getSessionUser as unknown as ReturnType<typeof vi.f
 describe('profile', () => {
   it('rejects unauthenticated users', async () => {
     mockedGetSessionUser.mockResolvedValueOnce(null);
-    const res = await GET();
+    const res = await GET(new Request('http://test/api/profile'));
     expect(res.status).toBe(401);
   });
 

@@ -4,15 +4,19 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
 
 ## Quick start
 
-1. Install dependencies
+1. Use Node.js 24.18.0 (the version in `.nvmrc` and the production image)
    ```bash
-   npm install
+   nvm use
    ```
-2. Configure environment
+2. Install dependencies
+   ```bash
+   npm ci
+   ```
+3. Configure environment
    ```bash
    cp .env.example .env.local
    ```
-3. Run dev server
+4. Run dev server
    ```bash
    npm run dev
    ```

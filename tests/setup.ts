@@ -60,6 +60,9 @@ beforeAll(async () => {
     env.MONGO_URI = existingUri;
   } else {
     mongo = await MongoMemoryServer.create({
+      binary: {
+        version: env.MONGOMS_VERSION || '7.0.14',
+      },
       instance: {
         ip: '127.0.0.1',
       },

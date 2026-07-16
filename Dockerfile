@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.7
-FROM node:20-bookworm-slim AS base
+FROM node:24.18.0-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 
-FROM node:20-bookworm-slim AS deps
+FROM node:24.18.0-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN HUSKY=0 npm ci

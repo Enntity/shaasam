@@ -31,7 +31,18 @@ The script will:
 - Create `/opt/shaasam/.env`
 - Create the Docker network
 
-Twilio SMS can be configured either with `TWILIO_FROM` (Messaging) or `TWILIO_VERIFY_SERVICE_SID` (Verify).
+Production phone verification requires `TWILIO_ACCOUNT_SID`,
+`TWILIO_VERIFY_SERVICE_SID`, `TWILIO_API_KEY_SID`, and `TWILIO_API_KEY_SECRET`.
+Use a Restricted Twilio key with only `twilio/verify/verification/create` and
+`twilio/verify/verification-check/create`. Do not install the full account Auth
+Token on the production host. Missing restricted-key configuration fails closed;
+production never falls back to direct Messaging or locally generated OTPs.
+
+For migration, retain the previous immutable image/configuration until the new
+image passes health and real send/check/session tests. Deploy the restricted key,
+verify its policy and rejection of unrelated APIs, then rotate the account token
+and verify that the old token is rejected. After revocation, rollback must retain
+the restricted-key integration; the old image cannot use the revoked token.
 
 ## DNS
 

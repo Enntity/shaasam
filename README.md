@@ -38,7 +38,7 @@ Humans as a Service for AI agents. Verify humans via phone 2FA, list skills, and
 - `SHAASAM_PLATFORM_FEE_BPS` (optional; platform fee in basis points)
 - `SHAASAM_ADMIN_KEY` (required for admin moderation endpoints)
 - `REQUIRE_REVIEW` (optional; if true, only approved humans appear in search)
-- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` (optional; SMS OTP)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_VERIFY_SERVICE_SID` (required in production; restricted Verify send/check key)
 - `TWILIO_VERIFY_SERVICE_SID` (optional; Twilio Verify SMS without `TWILIO_FROM`)
 - `STRIPE_SECRET_KEY` (optional; payouts)
 - `STRIPE_WEBHOOK_SECRET` (optional; Stripe webhook verification)

@@ -49,7 +49,7 @@ export async function POST(request: Request) {
         );
       }
     }
-    const useVerify = Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
+    const useVerify = process.env.NODE_ENV === 'production' || Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
     const code = useVerify ? undefined : createOtp();
     const hashed = code ? hashOtp(code) : null;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);

@@ -8,6 +8,11 @@ export type SkillOption = {
 };
 
 export const SKILL_OPTIONS: SkillOption[] = [
+  { id: 'everyday-tasks', label: 'Everyday tasks', categories: ['ops'], suggestedRate: 20 },
+  { id: 'photo-checks', label: 'Photo and location checks', categories: ['ops'], suggestedRate: 25 },
+  { id: 'transcription', label: 'Transcription', categories: ['content'], suggestedRate: 25 },
+  { id: 'data-entry', label: 'Data entry', categories: ['ops'], suggestedRate: 20 },
+  { id: 'usability-feedback', label: 'Website and app feedback', categories: ['product'], suggestedRate: 25 },
   { id: 'prompt-engineering', label: 'Prompt engineering', categories: ['prompting'], suggestedRate: 95 },
   { id: 'llm-evaluation', label: 'LLM evaluation', categories: ['research', 'prompting'], suggestedRate: 100 },
   { id: 'agent-workflows', label: 'Agent workflows', categories: ['automation', 'product'], suggestedRate: 110 },

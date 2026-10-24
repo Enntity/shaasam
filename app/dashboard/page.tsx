@@ -5,9 +5,10 @@ import Link from 'next/link';
 import LogoMark from '@/components/LogoMark';
 import { validateAlias, normalizeAlias } from '@/lib/alias';
 import { deriveCategoriesFromSkills, getSuggestedRate, normalizeSkills, SKILL_OPTIONS } from '@/lib/skills';
-import { guessLocation, LOCATION_OPTIONS, ONLINE_LOCATION } from '@/lib/locations';
+import { LOCATION_OPTIONS, ONLINE_LOCATION } from '@/lib/locations';
 
 const AVAILABILITY_OPTIONS = [
+  { value: 'unavailable', label: 'Not taking work' },
   { value: 'now', label: 'Online now' },
   { value: 'weekdays', label: 'Weekdays' },
   { value: 'weekends', label: 'Weekends' },
@@ -66,13 +67,13 @@ export default function DashboardPage() {
         }
         const data = await res.json();
         setProfile(data);
-        setFullName(data.fullName || data.displayName || '');
-        setAlias(data.alias || data.displayName || '');
+        setFullName(data.fullName || '');
+        setAlias(data.alias || data.displayName || `helper-${crypto.randomUUID().slice(0, 8)}`);
         setAbout(data.about || data.bio || '');
         const normalizedSkills = normalizeSkills(data.skills).original;
-        setSkills(normalizedSkills);
+        setSkills(normalizedSkills.length ? normalizedSkills : ['Everyday tasks']);
         setHourlyRate(data.hourlyRate ? String(data.hourlyRate) : '');
-        setLocation(data.location || guessLocation());
+        setLocation(data.location || ONLINE_LOCATION);
         setAvailability(data.availability || 'weekdays');
         setEmail(data.email || '');
         if (data.alias || data.displayName) {
@@ -191,11 +192,6 @@ export default function DashboardPage() {
     setStatus('');
 
     const aliasCheck = validateAlias(alias);
-    if (!fullName.trim()) {
-      setSaving(false);
-      setError('Full name is required.');
-      return;
-    }
     if (!aliasCheck.valid || !aliasCheck.normalized) {
       setSaving(false);
       setError(aliasCheck.reason || 'Alias is invalid.');
@@ -233,7 +229,7 @@ export default function DashboardPage() {
         throw new Error(data?.error || 'Failed to save');
       }
       setProfile(data);
-      setStatus('Profile saved.');
+      setStatus('Profile saved. Next, finish payout setup. Tasks become available after profile approval.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -291,17 +287,17 @@ export default function DashboardPage() {
           <div className="nav-links">
             <Link href="/">Home</Link>
             <Link href="/dashboard">Dashboard</Link>
-            <Link href="/requests">Requests</Link>
+            <Link href="/requests">Tasks</Link>
+            <button className="link-button" onClick={async () => { const res = await fetch('/api/auth/logout', { method: 'POST' }); if (res.ok) window.location.href = '/'; }}>Log out</button>
           </div>
         </nav>
 
         <section className="hero" style={{ marginTop: 32 }}>
           <div>
             <div className="kicker">Human profile</div>
-            <h1 className="hero-title">Set the essentials. Everything else is automatic.</h1>
+            <h1 className="hero-title">Your profile, in a few taps.</h1>
             <p className="hero-copy">
-              Agents hire the clearest profiles first. Pick your skills, claim your alias, and let
-              the system fill in the rest.
+              Start with everyday tasks, or choose your specialist skills. Your public name can be a nickname. Save your profile, then finish payout setup.
             </p>
             <div className="hero-actions">
               <Link className="button button-primary" href="/requests">
@@ -319,7 +315,7 @@ export default function DashboardPage() {
             <div className="pills" style={{ marginTop: 18 }}>
               <span className="pill">Verified: {profile.phone}</span>
               {profile.stripeAccountId ? (
-                <span className="pill">Stripe connected</span>
+                <span className="pill">Payout setup started</span>
               ) : (
                 <span className="pill">Stripe pending</span>
               )}
@@ -329,18 +325,7 @@ export default function DashboardPage() {
           <div className="panel">
             <div className="form">
               <label className="label">
-                Full name
-                <input
-                  className="input"
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  placeholder="Ada Lovelace"
-                />
-              </label>
-
-              <label className="label">
-                Shaasam alias
+                Public name
                 <input
                   className="input"
                   autoComplete="username"
@@ -365,7 +350,7 @@ export default function DashboardPage() {
               ) : null}
 
               <label className="label">
-                Skills (pick as many as you want)
+                What can you help with?
                 <div className="skill-toolbar" style={{ marginTop: 10 }}>
                   <input
                     className="input"
@@ -405,7 +390,8 @@ export default function DashboardPage() {
                   <input
                     className="input"
                     type="number"
-                    min={0}
+                    min={1}
+                    max={10000}
                     value={hourlyRate}
                     onChange={(event) => {
                       setHourlyRate(event.target.value);
@@ -430,6 +416,20 @@ export default function DashboardPage() {
               <div className="helper">
                 Suggested rate: {suggestedRate ? `$${suggestedRate}/hr` : 'Select skills to get a suggestion.'}
               </div>
+
+              <details>
+                <summary>Optional profile details</summary>
+                <div className="form" style={{ marginTop: 16 }}>
+              <label className="label">
+                Name (optional, private)
+                <input
+                  className="input"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(event) => setFullName(event.target.value)}
+                  placeholder="Ada Lovelace"
+                />
+              </label>
 
               <label className="label">
                 Location
@@ -483,6 +483,8 @@ export default function DashboardPage() {
                 />
               </label>
 
+                </div>
+              </details>
               {error ? <div className="helper" style={{ color: '#d92d20' }}>{error}</div> : null}
               {status ? <div className="helper" style={{ color: '#157f6e' }}>{status}</div> : null}
               <button
@@ -494,10 +496,10 @@ export default function DashboardPage() {
                 {saving ? 'Saving...' : 'Save profile'}
               </button>
               <button className="button button-secondary" type="button" onClick={connectStripe}>
-                {profile.stripeAccountId ? 'Update Stripe payout' : 'Connect Stripe payout'}
+                {profile.stripeAccountId ? 'Check or finish payout setup' : 'Set up payouts'}
               </button>
               <div className="helper">
-                Stripe Connect is optional in dev. Configure it to enable real payouts.
+                Finish Stripe setup before accepting work. Stripe collects your banking and identity details.
               </div>
             </div>
           </div>

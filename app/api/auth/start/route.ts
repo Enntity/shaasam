@@ -5,6 +5,8 @@ import { normalizePhone } from '@/lib/phone';
 import { sendOtp } from '@/lib/twilio';
 import { recordAudit } from '@/lib/audit';
 import { isAllowedOrigin } from '@/lib/origin';
+import { checkApiKeyRateLimit } from '@/lib/api-key-rate-limit';
+import { readJson, failure } from '@/lib/http';
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -13,7 +15,7 @@ const RESEND_WINDOW_MS = 60 * 1000;
 
 export async function POST(request: Request) {
   // Rate limit: 5 OTP requests per minute per IP
-  const rateLimitResult = checkRateLimit(request, {
+  const rateLimitResult = await checkRateLimit(request, {
     limit: 5,
     window: 60 * 1000,
   });
@@ -32,37 +34,31 @@ export async function POST(request: Request) {
     if (!isAllowedOrigin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const body = await request.json();
+    const body = await readJson(request);
     const phone = normalizePhone(body?.phone || '');
     if (!phone) {
       return NextResponse.json({ error: 'Enter a valid phone number.' }, { status: 400 });
     }
 
     const db = await getDb();
-    const existing = await db.collection('verifications').findOne({ phone });
-    if (existing?.createdAt) {
-      const createdAt = new Date(existing.createdAt).getTime();
-      if (Date.now() - createdAt < RESEND_WINDOW_MS) {
-        return NextResponse.json(
-          { error: 'Please wait a moment before requesting another code.' },
-          { status: 429 }
-        );
-      }
-    }
+    const quota = await checkApiKeyRateLimit(`otp-phone:${phone}`, { limit: 5, window: 3600000 });
+    if (!quota.allowed) return NextResponse.json({ error: 'Too many codes requested. Try again later.' }, { status: 429 });
     const useVerify = process.env.NODE_ENV === 'production' || Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
     const code = useVerify ? undefined : createOtp();
     const hashed = code ? hashOtp(code) : null;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    await db.collection('verifications').deleteMany({ phone });
-    await db.collection('verifications').insertOne({
-      phone,
-      ...(hashed ? { hash: hashed.hash, salt: hashed.salt } : {}),
-      expiresAt,
-      createdAt: new Date(),
-      attempts: 0,
-      provider: useVerify ? 'verify' : 'sms',
-    });
+    try {
+      await db.collection('verifications').updateOne({ phone, $or: [
+        { createdAt: { $lte: new Date(Date.now() - RESEND_WINDOW_MS) } }, { createdAt: { $exists: false } },
+      ] }, { $set: {
+        phone, ...(hashed ? { hash: hashed.hash, salt: hashed.salt } : {}), expiresAt,
+        createdAt: new Date(), attempts: 0, provider: useVerify ? 'verify' : 'sms',
+      } }, { upsert: true });
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) return NextResponse.json({ error: 'Wait one minute before requesting another code.' }, { status: 429 });
+      throw error;
+    }
 
     const sendResult = await sendOtp(phone, code);
 
@@ -90,7 +86,6 @@ export async function POST(request: Request) {
       headers: getRateLimitHeaders(rateLimitResult),
     });
   } catch (error) {
-    console.error('OTP start failed', error);
-    return NextResponse.json({ error: 'Unable to send code.' }, { status: 500 });
+    return failure(error);
   }
 }

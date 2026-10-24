@@ -37,8 +37,19 @@ services:
 
   # Shaasam Web App
   app:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY}@${IMAGE_DIGEST:?Set an immutable image digest}
     container_name: shaasam-app
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     env_file:
       - .env
@@ -55,6 +66,8 @@ services:
       - "traefik.http.routers.shaasam.tls.domains[1].main=www.${DOMAIN}"
       - "traefik.http.services.shaasam.loadbalancer.server.port=3000"
       - "traefik.docker.network=shaasam_web"
+      - "traefik.http.routers.shaasam.middlewares=shaasam-limits"
+      - "traefik.http.middlewares.shaasam-limits.buffering.maxRequestBodyBytes=262144"
 
 networks:
   web:

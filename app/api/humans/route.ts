@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
-import { isValidApiKey } from '@/lib/api-key';
+import { getAgentId, isValidApiKey } from '@/lib/api-key';
 import { normalizeCategories } from '@/lib/categories';
 import { normalizeSkills } from '@/lib/skills';
 import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-limit';
@@ -8,13 +8,13 @@ import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-li
 export const runtime = 'nodejs';
 
 function escapeRegex(input: string) {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function parseNumber(value: string | null, fallback: number) {
   if (!value) return fallback;
   const parsed = Number(value);
-  return Number.isNaN(parsed) ? fallback : parsed;
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function scoreHuman({
@@ -60,7 +60,6 @@ function scoreHuman({
     const alias = human.alias || human.displayName;
     const about = human.about || human.bio;
     if (alias && regex.test(alias)) score += 6;
-    if (human.fullName && regex.test(human.fullName)) score += 3;
     if (human.headline && regex.test(human.headline)) score += 2;
     if (about && regex.test(about)) score += 3;
     if (Array.isArray(human.skills) && human.skills.some((skill: string) => regex.test(skill))) {
@@ -94,13 +93,13 @@ function scoreHuman({
 }
 
 export async function GET(request: Request) {
-  const apiKey = request.headers.get('x-api-key') || '';
+  const apiKey = getAgentId(request) || '';
   if (!isValidApiKey(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   // Rate limit: 60 requests per minute per API key
-  const rateLimitResult = checkApiKeyRateLimit(apiKey, {
+  const rateLimitResult = await checkApiKeyRateLimit(apiKey, {
     limit: 60,
     window: 60 * 1000,
   });
@@ -127,6 +126,8 @@ export async function GET(request: Request) {
   const offset = Math.max(parseNumber(url.searchParams.get('offset'), 0), 0);
   const sort = url.searchParams.get('sort');
   const includeScores = url.searchParams.get('includeScores') === 'true';
+
+  if (!Number.isInteger(limit) || limit < 1 || !Number.isInteger(offset) || offset > 10000 || minRate < 0 || maxRate < minRate) return NextResponse.json({ error: 'Invalid pagination or rate range.' }, { status: 400 });
 
   const skills = skillsParam
     ? normalizeSkills(skillsParam).normalized.slice(0, 12)
@@ -167,7 +168,6 @@ export async function GET(request: Request) {
     const regex = new RegExp(escapeRegex(q), 'i');
     query.$or = [
       { alias: regex },
-      { fullName: regex },
       { about: regex },
       { displayName: regex },
       { headline: regex },

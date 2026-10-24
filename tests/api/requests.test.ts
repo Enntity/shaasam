@@ -14,9 +14,9 @@ describe('requests', () => {
         {
           title: 'Need help',
           description: 'Debug a flaky test',
-          skills: ['node'],
+          skills: ['typescript-node'], acceptanceCriteria: 'A fix', budgetCents: 1500, durationMinutes: 15,
         },
-        { headers: withApiKey() }
+        { headers: withApiKey({ 'idempotency-key': 'test-task' }) }
       )
     );
     expect(res.status).toBe(200);
@@ -28,12 +28,12 @@ describe('requests', () => {
     await POST(
       jsonRequest(
         'http://test/api/requests',
-        { title: 'Task', description: 'Do stuff', skills: [] },
-        { headers: withApiKey() }
+        { title: 'Task', description: 'Do stuff', skills: [], acceptanceCriteria: 'A report', budgetCents: 1500, durationMinutes: 15 },
+        { headers: withApiKey({ 'idempotency-key': 'test-task' }) }
       )
     );
 
-    const res = await GET(makeGet('http://test/api/requests', withApiKey()));
+    const res = await GET(makeGet('http://test/api/requests', withApiKey({ 'idempotency-key': 'test-task' })));
     expect(res.status).toBe(200);
     const payload = await res.json();
     expect(payload.data.length).toBeGreaterThan(0);

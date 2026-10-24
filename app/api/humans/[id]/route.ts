@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
-import { isValidApiKey } from '@/lib/api-key';
+import { getAgentId, isValidApiKey } from '@/lib/api-key';
+
+import { checkApiKeyRateLimit, getRateLimitHeaders } from '@/lib/api-key-rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +15,8 @@ export async function GET(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const limit = await checkApiKeyRateLimit(`human-detail:${getAgentId(request)}`, { limit: 60, window: 60000 });
+  if (!limit.allowed) return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429, headers: getRateLimitHeaders(limit) });
   const { id } = await params;
   if (!ObjectId.isValid(id)) {
     return NextResponse.json({ error: 'Invalid id' }, { status: 400 });

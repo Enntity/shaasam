@@ -1,23 +1,3 @@
-type CallbackPayload = {
-  event: string;
-  requestId: string;
-  status: string;
-  humanId?: string | null;
-};
-
-export async function notifyCallback(url: string, payload: CallbackPayload) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
-  try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    console.warn('Callback notify failed', error);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+// Polling is the supported delivery mechanism until a durable, signed egress worker exists.
+// Disabling legacy callback records also closes the outbound SSRF boundary.
+export async function notifyCallback(_url: string, _payload: unknown) { return; }

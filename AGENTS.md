@@ -29,17 +29,17 @@ Canonical shorthand: Shaasam coordinates consensual human capability; the entity
 
 ## Domain vocabulary
 
-- **Agent API**: machine-facing routes protected by `x-api-key` or bearer key when `SHAASAM_API_KEY` is configured.
+- **Agent API**: machine-facing routes protected by `x-api-key` or bearer key with independent stable identities in `SHAASAM_AGENT_KEYS` (legacy single key is local-only).
 - **Human session**: signed `shaasam_session` HTTP-only cookie produced after phone verification.
 - **Human**: verified user profile with skills, categories, rate, availability, status/review state, and optional Stripe account.
-- **Request**: agent-authored work offer with title, description, skills, budget, requester metadata, optional callback, and lifecycle status.
-- **Request lifecycle**: open → accepted → started → completed, with decline and payment state tracked separately. Preserve transition ownership and idempotency.
+- **Request**: agent-authored work offer with title, description, skills, budget, requester metadata, acceptance criteria, and lifecycle status.
+- **Request lifecycle**: open → accepted → in_progress → completed, with decline and payment state tracked separately. Preserve transition ownership and idempotency.
 - **Skill**: normalized choice from `lib/skills.ts`; categories are derived from known skill metadata. Do not accept arbitrary labels as equivalent without a migration decision.
 - **Review**: moderation state controlling visibility when `REQUIRE_REVIEW` is enabled.
-- **Payment intent**: Stripe manual-capture hold directed to a connected human account, optionally tied to a request.
+- **Payment intent**: Stripe manual-capture hold directed to a connected human account, bound to exactly one owned request and its accepted human.
 - **Capture / cancel**: release or cancel held funds. These are irreversible/external operations requiring exact authorization and idempotent handling.
 - **Platform fee**: basis-point fee from `SHAASAM_PLATFORM_FEE_BPS`.
-- **Callback**: best-effort outbound notification to the agent-supplied URL. It is not a source of truth for local request state.
+- **Callback**: disabled; callback URLs are rejected. Agents poll the authenticated API.
 - **Audit record**: immutable-enough record of security/financial/domain action. Add one for meaningful state mutations.
 
 ## Repository map
@@ -55,14 +55,14 @@ Canonical shorthand: Shaasam coordinates consensual human capability; the entity
 - `lib/mongodb.ts`, `lib/indexes.ts`: database connection and indexes.
 - `lib/audit.ts`: audit trail.
 - `lib/callbacks.ts`, `lib/origin.ts`: outbound callback and same-origin controls.
-- `tests/`: API and library contracts, backed by real test Mongo or MongoMemoryServer.
+- `tests/`: API and library contracts, backed only by disposable MongoMemoryServer instances.
 - `Dockerfile`, `docker-compose.prod.yml`, `.github/workflows/deploy.yml`, `deploy/`: production artifact/deploy path.
 
 ## Trust boundaries
 
 ### Agent routes
 
-- Require the configured API key in production; absence currently makes `isValidApiKey` permissive and is suitable only for deliberate local development.
+- Require a configured independent agent key; missing or malformed configuration fails closed. Derive ownerId from the key map, never requester display text.
 - Apply per-key rate limits, validate/bound every field, and audit mutations.
 - Do not treat requester display metadata as authenticated human or organization identity.
 - Agent authority to create a request is not automatic authority to capture funds or act for a human.
@@ -91,7 +91,7 @@ Canonical shorthand: Shaasam coordinates consensual human capability; the entity
 ### Callbacks
 
 - Agent-provided callback URLs are untrusted outbound destinations and an SSRF/egress boundary. Validate scheme/host/policy before expanding callback functionality.
-- Current callbacks are short-timeout, best-effort notifications. Persist local state first; a failed callback must not roll back a completed human/payment transition.
+- Callbacks are disabled, including legacy records. Do not restore outbound delivery without an explicit SSRF and durable delivery design.
 - Do not send secrets or unnecessary human PII in callback payloads.
 
 ## Data and lifecycle rules
@@ -122,11 +122,11 @@ npm ci
 npm run lint
 npm run typecheck
 npm test
-npm run build
+AUTH_SECRET=build-only-placeholder-not-a-runtime-secret npm run build
 git diff --check
 ```
 
-Tests use `TEST_MONGO_URI`, `MONGO_URI`, or `MONGODB_URI` when a reachable test database is explicitly available; otherwise they start MongoMemoryServer. The test database is dropped between tests. Never point these variables at production.
+Tests discard application Mongo/provider configuration and start MongoMemoryServer. Only that disposable database is dropped between tests. Never load .env.local in tests. Provider qualification is separate from unit tests.
 
 For local development:
 
@@ -139,7 +139,7 @@ When Twilio is not configured, development may log an OTP. Do not expose that be
 
 ## Deployment
 
-Production uses a Node 24 Debian image, Next.js app container, external MongoDB, and Traefik on a Hetzner VPS. GitHub Actions builds/pushes GHCR images and deploys Compose under `/opt/shaasam` with a non-root deploy user.
+Production uses a Node 24 Debian image, Next.js app container, external MongoDB, and Traefik on a Hetzner VPS. GitHub Actions validates PRs and builds/pushes main images. Only a manual workflow dispatch from main deploys an immutable digest under `/opt/shaasam`. See deploy/README.md for maintenance and rollback; never run a migration while writers are active.
 
 - Keep `package.json`, `.nvmrc`, Docker base image, lockfile, and workflow expectations aligned.
 - Verify the built container on the target architecture; local host success alone is not the artifact boundary.

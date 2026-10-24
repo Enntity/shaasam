@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
 
 :root {
   --bg-1: #f7f6f2;
@@ -553,7 +553,9 @@ main {
   }
 
   .nav-links {
-    display: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
   .field-row {
@@ -561,3 +563,9 @@ main {
     align-items: stretch;
   }
 }
+
+.input, .textarea, .select { color: var(--ink); }
+:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 4px; }
+.button:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+.card p, .result-text { overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.6; }
+@media (max-width: 480px) { .page { padding: 24px 16px 48px; } .panel { padding: 20px; } .logo-mark { width: 48px; height: 48px; } .hero { grid-template-columns: minmax(0, 1fr); } .nav { flex-wrap: wrap; } }

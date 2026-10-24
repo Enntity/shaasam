@@ -7,11 +7,14 @@ import { deriveCategoriesFromSkills, normalizeSkills } from '@/lib/skills';
 import { recordAudit } from '@/lib/audit';
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
+import { isAllowedOrigin } from '@/lib/origin';
+import { readJson, failure } from '@/lib/http';
+
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   // Rate limit: 100 requests per minute per IP
-  const rateLimitResult = checkRateLimit(request, {
+  const rateLimitResult = await checkRateLimit(request, {
     limit: 100,
     window: 60 * 1000,
   });
@@ -37,8 +40,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isAllowedOrigin(request)) return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
   // Rate limit: 10 requests per minute per IP (strict for updates)
-  const rateLimitResult = checkRateLimit(request, {
+  const rateLimitResult = await checkRateLimit(request, {
     limit: 10,
     window: 60 * 1000,
   });
@@ -59,8 +63,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const fullName = body?.fullName ? String(body.fullName).trim().slice(0, 120) : '';
+    const body = await readJson(request);
+    const fullName = body?.fullName ? String(body.fullName).trim().slice(0, 120) : String(body?.alias || '').trim();
     if (!fullName) {
       return NextResponse.json({ error: 'Full name is required.' }, { status: 400 });
     }
@@ -82,7 +86,9 @@ export async function POST(request: Request) {
     const aliasNormalized = aliasCheck.normalized;
     const about = body?.about ? String(body.about).slice(0, 1200) : '';
     const rawRate = body?.hourlyRate ? Number(body.hourlyRate) : 0;
-    const hourlyRate = Number.isFinite(rawRate) ? rawRate : 0;
+    if (!Number.isFinite(rawRate) || rawRate < 1 || rawRate > 10000) return NextResponse.json({ error: 'Choose an hourly rate between $1 and $10,000.' }, { status: 400 });
+    if (body.availability && !['now', 'weekdays', 'weekends', 'nights', 'unavailable'].includes(body.availability)) return NextResponse.json({ error: 'Invalid availability.' }, { status: 400 });
+    const hourlyRate = rawRate;
 
     const update = {
       email: body?.email ? String(body.email).slice(0, 160) : '',
@@ -156,7 +162,7 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
-    console.error('Profile update failed', error);
-    return NextResponse.json({ error: 'Unable to save profile.' }, { status: 500 });
+    if ((error as { code?: number }).code === 11000) return NextResponse.json({ error: 'Alias is already taken.' }, { status: 409 });
+    return failure(error);
   }
 }

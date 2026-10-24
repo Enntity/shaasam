@@ -37,23 +37,23 @@ echo ""
 
 read -r -p "Domain name (e.g., app.example.com): " DOMAIN
 read -r -p "Email for SSL certificates: " ACME_EMAIL
-read -r -p "MongoDB connection string: " MONGODB_URI
+read -r -s -p "MongoDB connection string: " MONGODB_URI
 read -r -p "MongoDB database name (default: shaasam): " MONGODB_DB
 MONGODB_DB=${MONGODB_DB:-shaasam}
 
-read -r -p "Auth Secret (leave blank to generate): " AUTH_SECRET
+read -r -s -p "Auth Secret (leave blank to generate): " AUTH_SECRET
 if [ -z "${AUTH_SECRET}" ]; then
   AUTH_SECRET=$(openssl rand -base64 32)
   echo -e "${GREEN}Generated AUTH_SECRET${NC}"
 fi
 
-read -r -p "Shaasam API key (leave blank to generate): " SHAASAM_API_KEY
+read -r -s -p "Initial agent key (leave blank to generate): " SHAASAM_API_KEY
 if [ -z "${SHAASAM_API_KEY}" ]; then
   SHAASAM_API_KEY=$(openssl rand -hex 24)
   echo -e "${GREEN}Generated SHAASAM_API_KEY${NC}"
 fi
 
-read -r -p "Shaasam Admin key (leave blank to generate): " SHAASAM_ADMIN_KEY
+read -r -s -p "Shaasam Admin key (leave blank to generate): " SHAASAM_ADMIN_KEY
 if [ -z "${SHAASAM_ADMIN_KEY}" ]; then
   SHAASAM_ADMIN_KEY=$(openssl rand -hex 32)
   echo -e "${GREEN}Generated SHAASAM_ADMIN_KEY${NC}"
@@ -74,9 +74,9 @@ echo ""
 read -r -p "Twilio Verify Service SID: " TWILIO_VERIFY_SERVICE_SID
 
 echo ""
-echo -e "${YELLOW}Stripe (optional):${NC}"
-read -r -p "Stripe Secret Key: " STRIPE_SECRET_KEY
-read -r -p "Stripe Webhook Secret: " STRIPE_WEBHOOK_SECRET
+echo -e "${YELLOW}Stripe (required before launch):${NC}"
+read -r -s -p "Stripe Secret Key: " STRIPE_SECRET_KEY
+read -r -s -p "Stripe Webhook Secret: " STRIPE_WEBHOOK_SECRET
 read -r -p "Stripe Connect Return URL (default: https://${DOMAIN}/dashboard): " STRIPE_CONNECT_RETURN_URL
 read -r -p "Stripe Connect Refresh URL (default: https://${DOMAIN}/dashboard): " STRIPE_CONNECT_REFRESH_URL
 STRIPE_CONNECT_RETURN_URL=${STRIPE_CONNECT_RETURN_URL:-https://${DOMAIN}/dashboard}
@@ -92,6 +92,19 @@ read -r -p "Create non-root deploy user (default: deploy): " DEPLOY_USER
 DEPLOY_USER=${DEPLOY_USER:-deploy}
 read -r -p "Disable root SSH login? (y/n, default: y): " DISABLE_ROOT
 DISABLE_ROOT=${DISABLE_ROOT:-y}
+
+# Validate before changing the host. Keys must be safe single-line env values.
+if [[ ! "${DOMAIN}" =~ ^[a-zA-Z0-9.-]+$ ]] || [[ ! "${SHAASAM_API_KEY}" =~ ^[a-zA-Z0-9_-]{32,}$ ]]; then
+  echo "Invalid domain or initial agent key (use at least 32 letters, digits, underscores or hyphens)." >&2
+  exit 1
+fi
+if [ "${#AUTH_SECRET}" -lt 32 ] || [ "${#SHAASAM_ADMIN_KEY}" -lt 32 ]; then
+  echo "Auth and admin secrets must have at least 32 characters." >&2
+  exit 1
+fi
+for name in TWILIO_ACCOUNT_SID TWILIO_API_KEY_SID TWILIO_API_KEY_SECRET TWILIO_VERIFY_SERVICE_SID STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET; do
+  if [ -z "${!name}" ]; then echo "Missing required provider setting: ${name}" >&2; exit 1; fi
+done
 
 print_step "Step 1: Updating system..."
 apt-get update && apt-get upgrade -y
@@ -155,14 +168,18 @@ chown -R "${DEPLOY_USER}:${DEPLOY_USER}" /opt/shaasam
 cd /opt/shaasam
 
 print_step "Step 7: Creating environment file..."
+umask 077
 cat > .env << EOF_ENV
 # Domain Configuration
 DOMAIN=${DOMAIN}
+SITE_URL=https://${DOMAIN}
+# Enable only after checking proxy isolation and X-Real-IP replacement.
+TRUST_PROXY=false
 ACME_EMAIL=${ACME_EMAIL}
 
 # GitHub Container Registry
 GITHUB_REPOSITORY=${GITHUB_REPOSITORY}
-IMAGE_TAG=latest
+# IMAGE_DIGEST is persisted by the deployment workflow in .release.env.
 
 # MongoDB
 MONGODB_URI=${MONGODB_URI}
@@ -171,7 +188,7 @@ MONGODB_DB=${MONGODB_DB}
 
 # Authentication
 AUTH_SECRET=${AUTH_SECRET}
-SHAASAM_API_KEY=${SHAASAM_API_KEY}
+SHAASAM_AGENT_KEYS='{"initial-agent":"${SHAASAM_API_KEY}"}'
 SHAASAM_PLATFORM_FEE_BPS=${SHAASAM_PLATFORM_FEE_BPS}
 SHAASAM_ADMIN_KEY=${SHAASAM_ADMIN_KEY}
 REQUIRE_REVIEW=${REQUIRE_REVIEW}
@@ -182,7 +199,7 @@ TWILIO_API_KEY_SID=${TWILIO_API_KEY_SID}
 TWILIO_API_KEY_SECRET=${TWILIO_API_KEY_SECRET}
 TWILIO_VERIFY_SERVICE_SID=${TWILIO_VERIFY_SERVICE_SID}
 
-# Stripe (optional)
+# Stripe (required before launch)
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
 STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
 STRIPE_CONNECT_RETURN_URL=${STRIPE_CONNECT_RETURN_URL}
@@ -227,7 +244,8 @@ echo "   DEPLOY_SSH_KEY: (your private SSH key)"
 echo "   DEPLOY_PORT: 22 (only if not 22)"
 
 echo ""
-echo "3. Push to main branch to trigger deployment"
+echo "3. Verify proxy isolation, set TRUST_PROXY=true, rehearse migration, and complete provider qualification."
+echo "4. Merge reviewed code, then manually dispatch the deployment workflow from main."
 
 echo ""
 echo -e "${YELLOW}Saved credentials:${NC}"

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
+import { requestView } from '@/lib/requests';
 import { getSessionUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -57,6 +58,8 @@ export async function GET() {
     .collection('requests')
     .find({
       status: 'open',
+      ownerId: { $exists: true },
+      reportedAt: { $exists: false },
       declinedBy: { $ne: user._id },
       ...skillFilter,
     })
@@ -68,28 +71,17 @@ export async function GET() {
     .collection('requests')
     .find({
       acceptedBy: user._id,
-      status: { $in: ['accepted', 'in_progress', 'completed'] },
+      status: { $in: ['accepted', 'in_progress', 'completed', 'canceled'] },
     })
     .sort({ updatedAt: -1 })
     .limit(50)
     .toArray();
 
-  const mapRequest = (item: any) => ({
-    id: item._id.toString(),
-    title: item.title,
-    description: item.description,
-    skills: item.skills || [],
-    budget: item.budget,
-    requester: item.requester,
-    status: item.status,
-    acceptedAt: item.acceptedAt || null,
-    startedAt: item.startedAt || null,
-    completedAt: item.completedAt || null,
-    createdAt: item.createdAt,
-  });
-
+  const bps = Number(process.env.SHAASAM_PLATFORM_FEE_BPS || 0);
+  if (!Number.isInteger(bps) || bps < 0 || bps > 3000) return NextResponse.json({ error: 'Pricing unavailable.' }, { status: 503 });
+  const view = (item: any) => ({ ...requestView(item), humanReceivesCents: item.budgetCents - item.applicationFeeAmount });
   return NextResponse.json({
-    available: available.map(mapRequest),
-    mine: mine.map(mapRequest),
+    available: available.map(view),
+    mine: mine.map(view),
   });
 }

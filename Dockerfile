@@ -11,7 +11,7 @@ FROM base AS builder
 WORKDIR /app
 ARG MONGODB_URI=mongodb://127.0.0.1:27017/shaasam
 ARG MONGO_URI=mongodb://127.0.0.1:27017/shaasam
-ARG AUTH_SECRET=build-secret
+ARG AUTH_SECRET=build-only-placeholder-not-a-runtime-secret
 ARG SHAASAM_API_KEY=build-api-key
 ARG SHAASAM_ADMIN_KEY=build-admin-key
 ARG REQUIRE_REVIEW=false

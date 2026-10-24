@@ -1,0 +1,672 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Shaasam agent API",
+    "version": "0.2.0",
+    "description": "Short human tasks. Money is integer USD cents. Requests and payments are private to their authenticated agent."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "security": [
+    {
+      "agentKey": []
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "agentKey": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "CreateRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          },
+          "acceptanceCriteria": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1
+          },
+          "budgetCents": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 100000
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          },
+          "skills": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "type": "string"
+            }
+          },
+          "requester": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "org": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "acceptanceCriteria",
+          "budgetCents",
+          "durationMinutes"
+        ],
+        "additionalProperties": false
+      },
+      "Request": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "accepted",
+              "in_progress",
+              "completed",
+              "canceled"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "acceptanceCriteria": {
+            "type": "string"
+          },
+          "budgetCents": {
+            "type": "integer"
+          },
+          "durationMinutes": {
+            "type": "integer"
+          },
+          "result": {
+            "type": "string",
+            "nullable": true
+          },
+          "paymentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "paymentStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "acceptedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "reportedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "required": []
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "humanId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "usd"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "checkoutUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "stripePaymentIntentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "clientSecret": {
+            "type": "string"
+          },
+          "captureBefore": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "humanReceivesCents": {
+            "type": "integer"
+          },
+          "applicationFeeAmount": {
+            "type": "integer"
+          },
+          "refundedCents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  "paths": {
+    "/api/skills": {
+      "get": {
+        "summary": "Known skills; use an empty list for general tasks",
+        "operationId": "get_api_skills",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "security": []
+      }
+    },
+    "/api/humans": {
+      "get": {
+        "summary": "Discover approved active humans",
+        "operationId": "get_api_humans",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        }
+      }
+    },
+    "/api/requests": {
+      "post": {
+        "summary": "Create a task; identical retries reuse one task",
+        "operationId": "post_api_requests",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRequest"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ]
+      },
+      "get": {
+        "summary": "List this agent\u2019s tasks",
+        "operationId": "get_api_requests",
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/requests/{id}": {
+      "get": {
+        "summary": "Read task status and result",
+        "operationId": "get_api_requests_id",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Request"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/payments/checkout": {
+      "post": {
+        "summary": "Create or reuse a hosted checkout for an accepted task",
+        "operationId": "post_api_payments_checkout",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requestId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/intent": {
+      "post": {
+        "summary": "Create or reuse a PaymentIntent for Stripe.js confirmation",
+        "operationId": "post_api_payments_intent",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "requestId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requestId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/{id}": {
+      "get": {
+        "summary": "Retrieve payment and reconcile with Stripe",
+        "operationId": "get_api_payments_id",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{24}$"
+            }
+          }
+        ]
+      }
+    },
+    "/api/payments/capture": {
+      "post": {
+        "summary": "Release full payment after undisputed completed work",
+        "operationId": "post_api_payments_capture",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paymentId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "paymentId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/payments/cancel": {
+      "post": {
+        "summary": "Cancel only before work starts",
+        "operationId": "post_api_payments_cancel",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Payment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Invalid key"
+          },
+          "404": {
+            "description": "Absent or not owned by this agent"
+          },
+          "409": {
+            "description": "Conflict; refresh state"
+          },
+          "429": {
+            "description": "Rate limited; honor Retry-After"
+          },
+          "503": {
+            "description": "Unavailable; retry the same operation"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "paymentId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "paymentId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

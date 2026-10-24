@@ -20,6 +20,8 @@ if (!process.env.AUTH_SECRET) {
   }
 }
 
+if (process.env.NODE_ENV === 'production' && secret.length < 32) throw new Error('AUTH_SECRET must be at least 32 characters in production.');
+
 const secretKey = new TextEncoder().encode(secret);
 
 export async function createSessionToken(userId: string) {
@@ -47,13 +49,13 @@ export async function getSessionUser() {
   const token = cookieStore.get(cookieName)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secretKey);
+    const { payload } = await jwtVerify(token, secretKey, { algorithms: ['HS256'] });
     if (!payload.sub) return null;
     const db = await getDb();
     const user = await db
       .collection('users')
       .findOne({ _id: new ObjectId(payload.sub) });
-    if (!user) return null;
+    if (!user || !user.verified || user.status !== 'active') return null;
     return {
       id: user._id.toString(),
       phone: user.phone,
@@ -74,7 +76,7 @@ export async function getSessionUser() {
       status: user.status,
     } as const;
   } catch (error) {
-    console.warn('Session verification failed', error);
+    console.warn('Session verification failed');
     return null;
   }
 }

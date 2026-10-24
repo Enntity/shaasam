@@ -7,13 +7,14 @@ import { createSessionToken, setSessionCookie } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { checkOtp } from '@/lib/twilio';
 import { isAllowedOrigin } from '@/lib/origin';
+import { readJson, failure } from '@/lib/http';
 import { checkRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   // Rate limit: 10 OTP verify attempts per minute per IP
-  const rateLimitResult = checkRateLimit(request, {
+  const rateLimitResult = await checkRateLimit(request, {
     limit: 10,
     window: 60 * 1000,
   });
@@ -32,29 +33,19 @@ export async function POST(request: Request) {
     if (!isAllowedOrigin(request)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const body = await request.json();
+    const body = await readJson(request);
     const phone = normalizePhone(body?.phone || '');
     const code = String(body?.code || '').trim();
 
-    if (!phone || code.length !== 6) {
+    if (!phone || !/^\d{6}$/.test(code)) {
       return NextResponse.json({ error: 'Invalid verification code.' }, { status: 400 });
     }
 
     const db = await getDb();
-    const verification = await db.collection('verifications').findOne({ phone });
-    if (!verification) {
-      return NextResponse.json({ error: 'Verification expired. Request a new code.' }, { status: 400 });
-    }
-
-    if (verification.attempts && verification.attempts >= 5) {
-      await db.collection('verifications').deleteOne({ _id: verification._id });
-      return NextResponse.json({ error: 'Too many attempts. Request a new code.' }, { status: 429 });
-    }
-
-    if (verification.expiresAt && new Date(verification.expiresAt) < new Date()) {
-      await db.collection('verifications').deleteOne({ _id: verification._id });
-      return NextResponse.json({ error: 'Verification expired. Request a new code.' }, { status: 400 });
-    }
+    const verification = await db.collection('verifications').findOneAndUpdate({
+      phone, attempts: { $lt: 5 }, expiresAt: { $gt: new Date() },
+    }, { $inc: { attempts: 1 } }, { returnDocument: 'after' });
+    if (!verification) return NextResponse.json({ error: 'Code expired or attempts exhausted. Request a new code.' }, { status: 400 });
 
     const useVerify = Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
     let isValid = false;
@@ -68,13 +59,12 @@ export async function POST(request: Request) {
       isValid = check.valid;
     }
     if (!isValid) {
-      await db.collection('verifications').updateOne(
-        { _id: verification._id },
-        { $inc: { attempts: 1 } }
-      );
       return NextResponse.json({ error: 'Incorrect code.' }, { status: 400 });
     }
 
+    // Only one concurrent verification may consume this challenge and issue a session.
+    const consumed = await db.collection('verifications').deleteOne({ _id: verification._id, createdAt: verification.createdAt });
+    if (!consumed.deletedCount) return NextResponse.json({ error: 'Code already used. Request a new code.' }, { status: 409 });
     const now = new Date();
     const upsert = await db.collection('users').findOneAndUpdate(
       { phone },
@@ -94,7 +84,6 @@ export async function POST(request: Request) {
       { upsert: true, returnDocument: 'after' }
     );
 
-    await db.collection('verifications').deleteOne({ _id: verification._id });
 
     const userDoc = (upsert && 'value' in upsert ? upsert.value : upsert) as
       | { _id?: ObjectId }
@@ -126,7 +115,6 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
-    console.error('OTP verify failed', error);
-    return NextResponse.json({ error: 'Unable to verify code.' }, { status: 500 });
+    return failure(error);
   }
 }

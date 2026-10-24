@@ -20,8 +20,8 @@ function getMongoDbName() {
 
 async function getClient() {
   if (!globalWithMongo._mongoClientPromise) {
-    const client = new MongoClient(getMongoUri());
-    globalWithMongo._mongoClientPromise = client.connect();
+    const client = new MongoClient(getMongoUri(), { serverSelectionTimeoutMS: 5000, connectTimeoutMS: 5000 });
+    globalWithMongo._mongoClientPromise = client.connect().catch((error) => { globalWithMongo._mongoClientPromise = undefined; throw error; });
   }
   return globalWithMongo._mongoClientPromise;
 }
@@ -31,7 +31,8 @@ export async function getDb() {
   const db = client.db(getMongoDbName());
   if (!globalWithMongo._mongoIndexesPromise) {
     globalWithMongo._mongoIndexesPromise = ensureIndexes(db).catch((error) => {
-      console.warn('Index setup failed', error);
+      globalWithMongo._mongoIndexesPromise = undefined;
+      throw error;
     });
   }
   await globalWithMongo._mongoIndexesPromise;

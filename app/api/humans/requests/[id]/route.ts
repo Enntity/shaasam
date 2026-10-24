@@ -3,133 +3,74 @@ import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
 import { getSessionUser } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
-import { notifyCallback } from '@/lib/callbacks';
-
+import { isAllowedOrigin } from '@/lib/origin';
+import { failure, HttpError, readJson, textField } from '@/lib/http';
+import { getStripe } from '@/lib/stripe';
+import { refreshPayment } from '@/lib/payments';
+import { checkApiKeyRateLimit } from '@/lib/api-key-rate-limit';
 export const runtime = 'nodejs';
 
-function requireApproved(user: { reviewStatus?: string; status?: string }) {
-  const requireReview =
-    process.env.REQUIRE_REVIEW === 'true' || process.env.NODE_ENV === 'production';
-  if (requireReview && user.reviewStatus !== 'approved') {
-    return { ok: false, error: 'Profile pending review.' };
-  }
-  if (user.status && user.status !== 'active') {
-    return { ok: false, error: 'Account is not active.' };
-  }
-  return { ok: true };
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!isAllowedOrigin(request)) return NextResponse.json({ error: 'Invalid origin.' }, { status: 403 });
   const session = await getSessionUser();
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { id } = await params;
-  if (!ObjectId.isValid(id)) {
-    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
-  }
-
-  const body = await request.json();
-  const action = String(body?.action || '').toLowerCase();
-
-  if (!['accept', 'decline', 'start', 'complete'].includes(action)) {
-    return NextResponse.json({ error: 'Invalid action.' }, { status: 400 });
-  }
-
-  const db = await getDb();
-  const user = await db.collection('users').findOne({ _id: new ObjectId(session.id) });
-  if (!user) {
-    return NextResponse.json({ error: 'Profile not found.' }, { status: 404 });
-  }
-
-  const gate = requireApproved({ reviewStatus: user.reviewStatus, status: user.status });
-  if (!gate.ok) {
-    return NextResponse.json({ error: gate.error }, { status: 403 });
-  }
-
-  const now = new Date();
-  let updated: any = null;
-
-  if (action === 'accept') {
-    const result = await db.collection('requests').findOneAndUpdate(
-      { _id: new ObjectId(id), status: 'open' },
-      {
-        $set: {
-          status: 'accepted',
-          acceptedBy: user._id,
-          acceptedAt: now,
-          updatedAt: now,
-        },
-      },
-      { returnDocument: 'after' }
-    );
-    updated = result && 'value' in result ? result.value : result;
-    if (!updated) {
-      return NextResponse.json({ error: 'Request already claimed.' }, { status: 409 });
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { id } = await params;
+    if (!ObjectId.isValid(id)) throw new HttpError(400, 'Invalid id.');
+    const rate = await checkApiKeyRateLimit(`human:${session.id}:action`, { limit: 30, window: 60000 });
+    if (!rate.allowed) throw new HttpError(429, 'Too many actions. Try again shortly.');
+    const body = await readJson(request);
+    const action = body.action;
+    if (!['accept', 'decline', 'start', 'complete', 'report'].includes(action)) throw new HttpError(400, 'Invalid action.');
+    const db = await getDb();
+    const user = await db.collection('users').findOne({ _id: new ObjectId(session.id), verified: true, status: 'active' });
+    if (!user) throw new HttpError(403, 'Account is not active.');
+    if ((process.env.NODE_ENV === 'production' || process.env.REQUIRE_REVIEW === 'true') && user.reviewStatus !== 'approved') throw new HttpError(403, 'Profile pending review.');
+    const task = await db.collection('requests').findOne({ _id: new ObjectId(id) });
+    if (!task) throw new HttpError(404, 'Request not found.');
+    const now = new Date();
+    const filter: Record<string, any> = { _id: task._id };
+    const update: Record<string, any> = { $set: { updatedAt: now } };
+    if (action === 'accept') {
+      if (!user.alias || !user.stripeAccountId) throw new HttpError(409, 'Save your profile and connect payouts before accepting work.');
+      if (!task.ownerId || !Number.isSafeInteger(task.budgetCents)) throw new HttpError(409, 'This older request needs operator review.');
+      const stripe = getStripe();
+      if (!stripe) throw new HttpError(503, 'Payouts are unavailable.');
+      const account = await stripe.accounts.retrieve(user.stripeAccountId);
+      if (!account.payouts_enabled || account.capabilities?.transfers !== 'active') throw new HttpError(409, 'Finish your Stripe payout setup first.');
+      if (task.skillsNormalized?.length && !task.skillsNormalized.some((s: string) => (user.skillsNormalized || []).includes(s))) throw new HttpError(409, 'This task requires a skill on your profile.');
+      Object.assign(filter, { status: 'open', reportedAt: { $exists: false }, declinedBy: { $ne: user._id } });
+      Object.assign(update.$set, { status: 'accepted', acceptedBy: user._id, acceptedAt: now });
+    } else if (action === 'decline') {
+      filter.status = 'open';
+      update.$addToSet = { declinedBy: user._id };
+    } else if (action === 'report') {
+      if (!task.acceptedBy?.equals(user._id)) throw new HttpError(404, 'Request not found.');
+      // Reporting and settlement compete on the same request document.
+      filter.paymentOperation = { $exists: false };
+      Object.assign(update.$set, { reportedAt: now, reportedBy: user._id, reportReason: textField(body.reason, 'reason', 2000) });
+    } else {
+      filter.acceptedBy = user._id;
+      filter.reportedAt = { $exists: false };
+      filter.paymentOperation = { $exists: false };
+      if (!task.acceptedBy?.equals(user._id)) throw new HttpError(404, 'Request not found.');
+      if (action === 'start') {
+        const payment = task.paymentId && await db.collection('payments').findOne({ _id: task.paymentId, humanId: user._id, requestId: task._id });
+        const stripe = getStripe();
+        if (!payment || !stripe) throw new HttpError(409, 'Wait for the agent to fund this task before starting.');
+        const current = await refreshPayment(payment, stripe);
+        // Leave a day for review. Fail closed when a provider does not return hold expiry.
+        if (current.status !== 'requires_capture' || !current.captureBefore || current.captureBefore.getTime() < Date.now() + (task.durationMinutes + 1440) * 60000) throw new HttpError(409, 'Payment is not authorized for long enough. Ask the agent to resolve funding.');
+        Object.assign(filter, { status: 'accepted', paymentStatus: 'requires_capture' });
+        Object.assign(update.$set, { status: 'in_progress', startedAt: now });
+      } else {
+        filter.status = 'in_progress';
+        Object.assign(update.$set, { status: 'completed', completedAt: now, result: textField(body.result, 'result', 4000) });
+      }
     }
-  }
-
-  if (action === 'decline') {
-    await db.collection('requests').updateOne(
-      { _id: new ObjectId(id) },
-      { $addToSet: { declinedBy: user._id }, $set: { updatedAt: now } }
-    );
-  }
-
-  if (action === 'start') {
-    const result = await db.collection('requests').findOneAndUpdate(
-      { _id: new ObjectId(id), acceptedBy: user._id, status: 'accepted' },
-      { $set: { status: 'in_progress', startedAt: now, updatedAt: now } },
-      { returnDocument: 'after' }
-    );
-    updated = result && 'value' in result ? result.value : result;
-    if (!updated) {
-      return NextResponse.json({ error: 'Unable to start request.' }, { status: 409 });
-    }
-  }
-
-  if (action === 'complete') {
-    const result = await db.collection('requests').findOneAndUpdate(
-      {
-        _id: new ObjectId(id),
-        acceptedBy: user._id,
-        status: { $in: ['accepted', 'in_progress'] },
-      },
-      { $set: { status: 'completed', completedAt: now, updatedAt: now } },
-      { returnDocument: 'after' }
-    );
-    updated = result && 'value' in result ? result.value : result;
-    if (!updated) {
-      return NextResponse.json({ error: 'Unable to complete request.' }, { status: 409 });
-    }
-  }
-
-  await recordAudit({
-    action: `request.${action}`,
-    actorType: 'human',
-    actorId: session.id,
-    subjectType: 'request',
-    subjectId: id,
-  });
-
-  const requestDoc =
-    updated || (await db.collection('requests').findOne({ _id: new ObjectId(id) }));
-
-  if (requestDoc?.callbackUrl) {
-    notifyCallback(requestDoc.callbackUrl, {
-      event: `request.${action}`,
-      requestId: id,
-      status: requestDoc.status,
-      humanId: session.id,
-    });
-  }
-
-  return NextResponse.json({
-    ok: true,
-    status: requestDoc?.status || null,
-  });
+    const updated = await db.collection('requests').findOneAndUpdate(filter, update, { returnDocument: 'after' });
+    if (!updated) throw new HttpError(409, 'Task changed or action is unavailable. Refresh and try again.');
+    await recordAudit({ action: `request.${action}`, actorType: 'human', actorId: session.id, subjectType: 'request', subjectId: id });
+    return NextResponse.json({ ok: true, status: updated.status });
+  } catch (error) { return failure(error); }
 }

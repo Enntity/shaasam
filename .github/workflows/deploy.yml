@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       environment:
@@ -13,15 +16,37 @@ on:
         type: choice
         options:
           - production
-          - staging
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+concurrency:
+  group: shaasam-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  checks:
+    name: Validate source
+    runs-on: ubuntu-latest
+    container: node:24.18.0-bookworm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=moderate
+      - run: npm run build
+        env:
+          AUTH_SECRET: build-only-placeholder-not-a-runtime-secret
+
   build:
     name: Build Docker Image
+    if: github.event_name != 'pull_request'
+    needs: checks
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -29,7 +54,7 @@ jobs:
       packages: write
 
     outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.image.outputs.digest }}
 
     steps:
       - name: Checkout repository
@@ -59,6 +84,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
+        id: image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -70,6 +96,7 @@ jobs:
 
   deploy:
     name: Deploy to Hetzner
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: build
     environment: production
@@ -101,6 +128,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
+            set -eu
             cd /opt/shaasam
 
             # Repository name must be lowercase for Docker
@@ -110,17 +138,14 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Pull the new image
-            docker pull ghcr.io/${REPO_NAME}:latest
+            docker pull ghcr.io/${REPO_NAME}@${{ needs.build.outputs.image_digest }}
 
-            # Update the stack
-            export IMAGE_TAG=latest
-            export GITHUB_REPOSITORY=${REPO_NAME}
+            # Keep the last verified release until health succeeds.
+            umask 077
+            printf 'IMAGE_DIGEST=%s\nGITHUB_REPOSITORY=%s\n' '${{ needs.build.outputs.image_digest }}' "$REPO_NAME" > .release.candidate.env
+            docker compose --env-file .env --env-file .release.candidate.env -f docker-compose.prod.yml up -d --remove-orphans
 
-            # Deploy with docker-compose
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-
-            # Clean up old images
-            docker image prune -f
+            # Retain older images for rollback.
 
       - name: Health check
         uses: appleboy/ssh-action@v1.0.3
@@ -130,13 +155,16 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script: |
-            echo "Waiting for application to be ready..."
-            sleep 10
-
-            if docker ps | grep -q shaasam-app; then
-              echo "✅ Application is running"
-            else
-              echo "❌ Application failed to start"
-              docker logs shaasam-app --tail 50
-              exit 1
-            fi
+            set -eu
+            cd /opt/shaasam
+            for attempt in $(seq 1 20); do
+              if docker exec shaasam-app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"; then
+                if [ -f .release.env ]; then cp .release.env .release.previous.env; fi
+                mv .release.candidate.env .release.env
+                echo "Application and database are ready; immutable release persisted"
+                exit 0
+              fi
+              sleep 3
+            done
+            echo "Readiness failed; inspect configuration and restore the previous image digest"
+            exit 1

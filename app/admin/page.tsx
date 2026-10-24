@@ -32,6 +32,8 @@ function formatDate(value?: string) {
 export default function AdminPage() {
   const [adminKey, setAdminKey] = useState('');
   const [savedKey, setSavedKey] = useState('');
+  const [reports, setReports] = useState<Array<{ id: string; title: string; reportReason: string; ownerId: string }>>([]);
+  const [resolutions, setResolutions] = useState<Record<string, string>>({});
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,9 +42,7 @@ export default function AdminPage() {
   const [accountFilter, setAccountFilter] = useState('all');
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY) || '';
-    setAdminKey(stored);
-    setSavedKey(stored);
+    window.localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   const canQuery = useMemo(() => savedKey.length > 0, [savedKey]);
@@ -71,6 +71,8 @@ export default function AdminPage() {
         throw new Error(data?.error || 'Unable to load users');
       }
       setUsers(data?.data || []);
+      const reportsResponse = await fetch('/api/admin/requests', { headers: { 'x-admin-key': savedKey } });
+      if (reportsResponse.ok) setReports((await reportsResponse.json()).data || []);
       setStatusMessage(`Loaded ${data?.data?.length || 0} users.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load users');
@@ -84,9 +86,8 @@ export default function AdminPage() {
       setError('Enter an admin key.');
       return;
     }
-    window.localStorage.setItem(STORAGE_KEY, adminKey.trim());
     setSavedKey(adminKey.trim());
-    setStatusMessage('Admin key saved.');
+    setStatusMessage('Admin key is held only in this page. Closing or refreshing clears it.');
     setError('');
   };
 
@@ -95,6 +96,7 @@ export default function AdminPage() {
     setAdminKey('');
     setSavedKey('');
     setUsers([]);
+    setReports([]);
     setStatusMessage('Admin key cleared.');
   };
 
@@ -169,7 +171,7 @@ export default function AdminPage() {
               </label>
               <div className="hero-actions" style={{ marginTop: 6 }}>
                 <button className="button button-primary" type="button" onClick={saveKey}>
-                  Save key
+                  Unlock console
                 </button>
                 <button className="button button-secondary" type="button" onClick={clearKey}>
                   Clear key
@@ -183,6 +185,18 @@ export default function AdminPage() {
           </div>
         </section>
 
+        <section style={{ marginTop: 48 }}>
+          <h2>Reported tasks</h2>
+          <p>Investigate with both parties before resuming settlement. Resolving a report records your decision and permits normal payment actions; it does not charge or refund money.</p>
+          <div className="grid">{reports.map(report => <form className="card form" key={report.id} onSubmit={async event => {
+            event.preventDefault(); setLoading(true); setError('');
+            try {
+              const response = await fetch(`/api/admin/requests/${report.id}/resolve`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': savedKey }, body: JSON.stringify({ resolution: resolutions[report.id] }) });
+              const body = await response.json(); if (!response.ok) throw new Error(body.error);
+              await loadUsers();
+            } catch (err) { setError(err instanceof Error ? err.message : 'Unable to resolve report.'); } finally { setLoading(false); }
+          }}><h3>{report.title}</h3><p>{report.reportReason}</p><p className="helper">Task {report.id} · Agent {report.ownerId}</p><label className="label">Resolution<textarea className="textarea" required maxLength={2000} value={resolutions[report.id] || ''} onChange={e => setResolutions({ ...resolutions, [report.id]: e.target.value })} /></label><button type="submit" disabled={loading} className="button button-secondary">Record decision and resume settlement</button></form>)}</div>
+        </section>
         <section style={{ marginTop: 48 }}>
           <div className="admin-controls">
             <div className="admin-filter">

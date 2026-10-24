@@ -21,7 +21,7 @@
   "dependencies": {
     "jose": "5.9.3",
     "mongodb": "6.5.0",
-    "next": "^16.2.10",
+    "next": "^16.4.3",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "stripe": "14.25.0",
@@ -32,16 +32,16 @@
     "@types/react": "18.2.79",
     "@types/react-dom": "18.2.25",
     "@typescript-eslint/parser": "^8.54.0",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^9.2.0",
     "eslint-config-next": "^16.2.10",
     "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.0.0",
     "mongodb-memory-server": "^9.1.0",
     "typescript": "5.4.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   },
   "overrides": {
-    "postcss": "8.5.19"
+    "postcss": "8.5.31"
   }
 }

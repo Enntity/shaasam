@@ -23,7 +23,7 @@ export default function HumanAuthPanel({
   const searchParams = useSearchParams();
   const nextParam = searchParams?.get('next') || '';
   const safeNext =
-    nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '';
+    ['/dashboard', '/requests'].includes(nextParam) ? nextParam : '';
   const destination = safeNext || redirectTo;
 
   const [phone, setPhone] = useState('');
@@ -98,7 +98,7 @@ export default function HumanAuthPanel({
         <h2 style={{ margin: '12px 0' }}>
           {step === 'phone' ? 'Enter your phone number' : 'Enter your 6-digit code'}
         </h2>
-        <div className="form">
+        <form className="form" onSubmit={(event) => { event.preventDefault(); if (!loading && canSubmit) void (step === 'phone' ? startVerification() : verifyCode()); }}>
           {step === 'phone' ? (
             <label className="label">
               Phone number
@@ -122,7 +122,8 @@ export default function HumanAuthPanel({
                 autoComplete="one-time-code"
                 placeholder="123456"
                 value={code}
-                onChange={(event) => setCode(event.target.value)}
+                maxLength={6}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
               />
             </label>
           )}
@@ -143,22 +144,21 @@ export default function HumanAuthPanel({
               </button>
             </div>
           ) : null}
-          {error ? <div className="helper" style={{ color: '#d92d20' }}>{error}</div> : null}
-          {status ? <div className="helper" style={{ color: '#157f6e' }}>{status}</div> : null}
+          {error ? <div role="status" className="helper" style={{ color: '#d92d20' }}>{error}</div> : null}
+          {status ? <div role="status" className="helper" style={{ color: '#157f6e' }}>{status}</div> : null}
           {devCode ? <div className="helper">{devCode}</div> : null}
           <button
             className="button button-primary"
-            type="button"
+            type="submit"
             disabled={loading || !canSubmit}
-            onClick={step === 'phone' ? startVerification : verifyCode}
           >
             {loading ? 'Working...' : step === 'phone' ? 'Send code' : 'Verify & continue'}
           </button>
           <div className="helper">
-            By continuing you agree to light verification and responsible task routing.
+            We use your phone for sign-in. Your number is not shown to agents.
           </div>
           {footer}
-        </div>
+        </form>
       </div>
     </section>
   );

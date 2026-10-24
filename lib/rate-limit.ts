@@ -1,31 +1,5 @@
-/**
- * In-memory rate limiter using sliding window approach.
- * Suitable for single-instance deployments.
- * For distributed systems, upgrade to Redis-based solution.
- */
-
-interface RateLimitEntry {
-  timestamps: number[];
-  createdAt: number;
-}
-
-const rateLimitStore = new Map<string, RateLimitEntry>();
-const CLEANUP_INTERVAL = 5 * 60 * 1000; // Clean old entries every 5 minutes
-
-// Start cleanup interval
-if (typeof global !== 'undefined') {
-  (global as any).__rateLimitCleanupStarted ??= setInterval(() => {
-    const now = Date.now();
-    const maxAge = 60 * 60 * 1000; // Keep entries for 1 hour
-
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (now - entry.createdAt > maxAge) {
-        rateLimitStore.delete(key);
-      }
-    }
-  }, CLEANUP_INTERVAL);
-}
-
+import { createHash } from 'node:crypto';
+import { getDb } from './mongodb';
 export interface RateLimitConfig {
   /** Maximum requests allowed in the window */
   limit: number;
@@ -44,103 +18,35 @@ export interface RateLimitResult {
   retryAfter?: number;
 }
 
-/**
- * Check if request is within rate limit.
- * Returns result with headers ready for response.
- */
-export function checkRateLimit(
-  request: Request,
-  config: RateLimitConfig
-): RateLimitResult {
-  const key = config.keyGenerator
-    ? config.keyGenerator(request)
-    : getClientIp(request);
 
+export async function consumeQuota(key: string, config: { limit: number; window: number }): Promise<RateLimitResult> {
   const now = Date.now();
-  const windowStart = now - config.window;
-
-  let entry = rateLimitStore.get(key);
-
-  // Initialize or reset if window is old
-  if (!entry) {
-    entry = { timestamps: [now], createdAt: now };
-    rateLimitStore.set(key, entry);
-    return {
-      allowed: true,
-      limit: config.limit,
-      current: 1,
-      remaining: config.limit - 1,
-      resetAt: now + config.window,
-    };
+  const resetAt = (Math.floor(now / config.window) + 1) * config.window;
+  const bucket = createHash('sha256').update(`${key}:${config.limit}:${config.window}:${resetAt}`).digest('hex');
+  const db = await getDb();
+  try {
+    await db.collection('rate_limits').updateOne({ bucket }, {
+      $setOnInsert: { expiresAt: new Date(resetAt + config.window) }, $inc: { count: 1 },
+    }, { upsert: true });
+  } catch (error) {
+    if ((error as { code?: number }).code !== 11000) throw error;
+    await db.collection('rate_limits').updateOne({ bucket }, { $inc: { count: 1 } });
   }
-
-  // Remove timestamps outside the window
-  entry.timestamps = entry.timestamps.filter((ts) => ts > windowStart);
-
-  // Check if limit exceeded
-  const current = entry.timestamps.length;
-  if (current >= config.limit) {
-    const oldestTimestamp = entry.timestamps[0];
-    const retryAfter = Math.ceil((oldestTimestamp + config.window - now) / 1000);
-
-    return {
-      allowed: false,
-      limit: config.limit,
-      current,
-      remaining: 0,
-      resetAt: oldestTimestamp + config.window,
-      retryAfter: Math.max(1, retryAfter),
-    };
-  }
-
-  // Add current request
-  entry.timestamps.push(now);
-  const remaining = config.limit - entry.timestamps.length;
-
-  return {
-    allowed: true,
-    limit: config.limit,
-    current: entry.timestamps.length,
-    remaining,
-    resetAt: now + config.window,
-  };
+  const entry = await db.collection('rate_limits').findOne({ bucket });
+  const current = entry?.count || config.limit + 1;
+  return { allowed: current <= config.limit, current, limit: config.limit,
+    remaining: Math.max(0, config.limit - current), resetAt,
+    ...(current > config.limit ? { retryAfter: Math.ceil((resetAt - now) / 1000) } : {}) };
 }
 
-/**
- * Extract client IP from request headers.
- * Checks multiple header sources for proxy support.
- */
-function getClientIp(request: Request): string {
-  const headers = request.headers;
-
-  // Check common proxy headers
-  const forwarded = headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-
-  const xForwardedFor = headers.get('x-forwarded-for');
-  if (xForwardedFor) {
-    return xForwardedFor.split(',')[0].trim();
-  }
-
-  const realIp = headers.get('x-real-ip');
-  if (realIp) {
-    return realIp;
-  }
-
-  const cfConnectingIp = headers.get('cf-connecting-ip');
-  if (cfConnectingIp) {
-    return cfConnectingIp;
-  }
-
-  // Fallback to a generic identifier (only in dev/testing)
-  return 'unknown';
+export async function checkRateLimit(request: Request, config: RateLimitConfig): Promise<RateLimitResult> {
+  // App must be reachable only through the configured proxy, which overwrites X-Real-IP.
+  // Without that explicit trust, use one conservative bucket; never trust arbitrary forwarding headers.
+  const ip = process.env.TRUST_PROXY === 'true' ? request.headers.get('x-real-ip') || 'unknown' : 'unknown';
+  const key = config.keyGenerator ? config.keyGenerator(request) : `${new URL(request.url).pathname}:${ip}`;
+  return consumeQuota(key, config);
 }
 
-/**
- * Apply rate limit and return headers for response.
- */
 export function getRateLimitHeaders(
   result: RateLimitResult
 ): Record<string, string> {

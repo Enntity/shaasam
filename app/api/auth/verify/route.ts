@@ -58,7 +58,10 @@ export async function POST(request: Request) {
 
     const useVerify = Boolean(process.env.TWILIO_VERIFY_SERVICE_SID);
     let isValid = false;
-    if (verification.hash && verification.salt) {
+    if (process.env.NODE_ENV === 'production') {
+      const check = await checkOtp(phone, code);
+      isValid = check.valid;
+    } else if (verification.hash && verification.salt) {
       isValid = verifyOtp(code, verification.hash, verification.salt);
     } else if (useVerify) {
       const check = await checkOtp(phone, code);

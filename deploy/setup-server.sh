@@ -66,11 +66,12 @@ read -r -p "Require review before listing? (true/false, default: true): " REQUIR
 REQUIRE_REVIEW=${REQUIRE_REVIEW:-true}
 
 echo ""
-echo -e "${YELLOW}Twilio (optional):${NC}"
+echo -e "${YELLOW}Twilio Verify (required for production phone verification):${NC}"
 read -r -p "Twilio Account SID: " TWILIO_ACCOUNT_SID
-read -r -p "Twilio Auth Token: " TWILIO_AUTH_TOKEN
-read -r -p "Twilio From Number: " TWILIO_FROM
-read -r -p "Twilio Verify Service SID (optional): " TWILIO_VERIFY_SERVICE_SID
+read -r -p "Twilio Restricted API Key SID: " TWILIO_API_KEY_SID
+read -r -s -p "Twilio Restricted API Key Secret: " TWILIO_API_KEY_SECRET
+echo ""
+read -r -p "Twilio Verify Service SID: " TWILIO_VERIFY_SERVICE_SID
 
 echo ""
 echo -e "${YELLOW}Stripe (optional):${NC}"
@@ -175,10 +176,10 @@ SHAASAM_PLATFORM_FEE_BPS=${SHAASAM_PLATFORM_FEE_BPS}
 SHAASAM_ADMIN_KEY=${SHAASAM_ADMIN_KEY}
 REQUIRE_REVIEW=${REQUIRE_REVIEW}
 
-# Twilio (optional)
+# Twilio Verify (restricted send/check key only)
 TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
-TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
-TWILIO_FROM=${TWILIO_FROM}
+TWILIO_API_KEY_SID=${TWILIO_API_KEY_SID}
+TWILIO_API_KEY_SECRET=${TWILIO_API_KEY_SECRET}
 TWILIO_VERIFY_SERVICE_SID=${TWILIO_VERIFY_SERVICE_SID}
 
 # Stripe (optional)

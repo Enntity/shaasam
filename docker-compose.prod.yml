@@ -1,65 +1,77 @@
 services:
-  # Traefik - Reverse proxy with automatic SSL
   traefik:
-    image: traefik:v3.6.2
+    image: traefik:v3.7.16@sha256:c8a121e4bb1347e8fd52657fab12f2cb70b68f8a018895e2068f92c9e519b9c2
     container_name: traefik
     restart: unless-stopped
     command:
-      - "--api.dashboard=true"
-      - "--api.insecure=false"
-      - "--log.level=INFO"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--providers.docker.network=shaasam_web"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
-      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
-      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    - --providers.docker=true
+    - --providers.docker.exposedbydefault=false
+    - --providers.docker.network=shaasam_web
+    - --entrypoints.web.address=:80
+    - --entrypoints.websecure.address=:443
+    - --entrypoints.web.http.redirections.entrypoint.to=websecure
+    - --entrypoints.web.http.redirections.entrypoint.scheme=https
+    - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+    - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+    - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    - --api=false
+    - --api.dashboard=false
+    - --api.insecure=false
+    - --log.level=INFO
+    - --log.format=json
+    - --accesslog=true
+    - --accesslog.format=json
+    - --accesslog.fields.defaultmode=drop
+    - --accesslog.fields.headers.defaultmode=drop
+    - --accesslog.fields.queryparameters.defaultmode=drop
+    - --accesslog.fields.names.StartUTC=keep
+    - --accesslog.fields.names.Duration=keep
+    - --accesslog.fields.names.RouterName=keep
+    - --accesslog.fields.names.ServiceName=keep
+    - --accesslog.fields.names.ClientHost=keep
+    - --accesslog.fields.names.RequestMethod=keep
+    - --accesslog.fields.names.RequestProtocol=keep
+    - --accesslog.fields.names.DownstreamStatus=keep
+    - --accesslog.fields.names.OriginStatus=keep
+    - --accesslog.fields.names.DownstreamContentSize=keep
     ports:
-      - "80:80"
-      - "443:443"
+    - 80:80
+    - 443:443
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "traefik-certificates:/letsencrypt"
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - traefik-certificates:/letsencrypt
     networks:
-      - web
+    - web
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN}`)"
-      - "traefik.http.routers.dashboard.entrypoints=websecure"
-      - "traefik.http.routers.dashboard.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.dashboard.service=api@internal"
-      - "traefik.http.routers.dashboard.middlewares=auth"
-      - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
-
-  # Shaasam Web App
+    - traefik.enable=true
+    - traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '5'
   app:
     image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
     container_name: shaasam-app
     restart: unless-stopped
     env_file:
-      - .env
+    - .env
     environment:
-      - NODE_ENV=production
+    - NODE_ENV=production
     networks:
-      - web
+    - web
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.shaasam.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
-      - "traefik.http.routers.shaasam.entrypoints=websecure"
-      - "traefik.http.routers.shaasam.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.shaasam.tls.domains[0].main=${DOMAIN}"
-      - "traefik.http.routers.shaasam.tls.domains[1].main=www.${DOMAIN}"
-      - "traefik.http.services.shaasam.loadbalancer.server.port=3000"
-      - "traefik.docker.network=shaasam_web"
-
+    - traefik.enable=true
+    - traefik.http.routers.shaasam.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+    - traefik.http.routers.shaasam.entrypoints=websecure
+    - traefik.http.routers.shaasam.tls.certresolver=letsencrypt
+    - traefik.http.routers.shaasam.tls.domains[0].main=${DOMAIN}
+    - traefik.http.routers.shaasam.tls.domains[1].main=www.${DOMAIN}
+    - traefik.http.services.shaasam.loadbalancer.server.port=3000
+    - traefik.docker.network=shaasam_web
 networks:
   web:
     name: shaasam_web
     external: true
-
 volumes:
-  traefik-certificates:
+  traefik-certificates: null

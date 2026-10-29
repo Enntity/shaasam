@@ -107,7 +107,7 @@ Canonical shorthand: Shaasam coordinates consensual human capability; the entity
 ## Development workflow
 
 1. Inspect branch/dirty state and preserve unrelated deployment/runtime work.
-2. Use Node `24.18.0` via `.nvmrc`; the Docker image and engine range are pinned to Node 24.
+2. Use Node `24.22.1` via `.nvmrc`; the Docker image and engine range are pinned to Node 24.
 3. Identify the actor and trust boundary for every route: anonymous, agent key, human session, admin, Stripe webhook, or outbound callback.
 4. Add/adjust API tests for authorization, validation, rate limit, lifecycle, audit, and error behavior.
 5. Never hit real Twilio/Stripe or production Mongo from unit tests.
